@@ -1,0 +1,2 @@
+INSERT INTO route (name, cost, availability, average_response_time) VALUES ('OM via SamirPay', 0.5, true, 200.0);
+INSERT INTO route (name, cost, availability, average_response_time) VALUES ('OM via PayDunya', 0.6, true, 250.0);
