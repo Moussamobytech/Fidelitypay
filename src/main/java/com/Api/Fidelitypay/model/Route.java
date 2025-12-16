@@ -1,8 +1,6 @@
 package com.Api.Fidelitypay.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.Data;
 
 @Entity
@@ -10,11 +8,29 @@ import lombok.Data;
 public class Route {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name; // ex: "OM via SamirPay"
+    // Exemple : SAMIRPAY_OM, PAYDUNYA_WAVE
+    private String name;
+
+    // OM, WAVE, MOOV
+    private String operator;
+
+    // SAMIRPAY, PAYDUNYA
+    private String provider;
+
+    private boolean availability;
+
+    // Coût de transaction
     private double cost;
-    private boolean availability; // UP/DOWN
-    private double averageResponseTime;
+
+    // Temps moyen de réponse (ms)
+    private double avgLatency;
+
+    // Taux d’échec (0 → 1)
+    private double failureRate;
+
+    // Priorité manuelle (plus petit = meilleur)
+    private int priority;
 }

@@ -1,41 +1,81 @@
 package com.Api.Fidelitypay.service;
 
-
-
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.repository.RouteRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class RouteSelectionService {
 
-    @Autowired
-    private RouteRepository routeRepository;
+    private final RouteRepository routeRepository;
 
-    public Route selectBestRoute(String operator) {
-        // Récupérer routes UP pour l'opérateur (filtre par name contenant operator)
-        List<Route> availableRoutes = routeRepository.findByAvailabilityTrue()
-                .stream()
-                .filter(r -> r.getName().contains(operator))
-                .sorted(Comparator.comparingDouble(Route::getCost))
-                .collect(Collectors.toList());
-
-        return availableRoutes.isEmpty() ? null : availableRoutes.get(0);
+    public RouteSelectionService(RouteRepository routeRepository) {
+        this.routeRepository = routeRepository;
     }
 
-    public Route selectFallbackRoute(String operator) {
-        // Similaire, mais skip la première
-        List<Route> availableRoutes = routeRepository.findByAvailabilityTrue()
-                .stream()
-                .filter(r -> r.getName().contains(operator))
-                .sorted(Comparator.comparingDouble(Route::getCost))
-                .collect(Collectors.toList());
+    /**
+     * Sélection de la meilleure route
+     */
+    public Route selectBestRoute(String operator) {
 
-        return availableRoutes.size() < 2 ? null : availableRoutes.get(1);
+        List<Route> routes = getSortedRoutes(operator);
+
+        if (routes.isEmpty()) {
+            log.warn("No available route for operator {}", operator);
+            return null;
+        }
+
+        Route selected = routes.get(0);
+        log.info("Best route selected: {}", selected.getName());
+        return selected;
+    }
+
+    /**
+     * Sélection de la route fallback
+     */
+    public Route selectFallbackRoute(String operator) {
+
+        List<Route> routes = getSortedRoutes(operator);
+
+        if (routes.size() < 2) {
+            log.warn("No fallback route for operator {}", operator);
+            return null;
+        }
+
+        Route fallback = routes.get(1);
+        log.info("Fallback route selected: {}", fallback.getName());
+        return fallback;
+    }
+
+    /**
+     * Récupère et trie les routes par score
+     */
+    private List<Route> getSortedRoutes(String operator) {
+
+        return routeRepository.findByAvailabilityTrueAndOperator(operator)
+                .stream()
+                .sorted(Comparator.comparingDouble(this::calculateScore))
+                .toList();
+    }
+
+    /**
+     * Calcul du score global de la route
+     * Plus le score est bas, meilleure est la route
+     */
+    private double calculateScore(Route route) {
+
+        double costWeight = 0.5;
+        double latencyWeight = 0.3;
+        double failureWeight = 0.2;
+
+        return (route.getCost() * costWeight)
+                + (route.getAvgLatency() * latencyWeight / 1000)
+                + (route.getFailureRate() * failureWeight)
+                + route.getPriority();
     }
 }
