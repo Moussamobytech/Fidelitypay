@@ -19,12 +19,10 @@ public class RouteSelectionService {
     }
 
     /**
-     * Sélection de la meilleure route
+     * Sélection de la meilleure route disponible pour un opérateur
      */
     public Route selectBestRoute(String operator) {
-
         List<Route> routes = getSortedRoutes(operator);
-
         if (routes.isEmpty()) {
             log.warn("No available route for operator {}", operator);
             return null;
@@ -36,12 +34,10 @@ public class RouteSelectionService {
     }
 
     /**
-     * Sélection de la route fallback
+     * Sélection de la route fallback si la principale échoue
      */
     public Route selectFallbackRoute(String operator) {
-
         List<Route> routes = getSortedRoutes(operator);
-
         if (routes.size() < 2) {
             log.warn("No fallback route for operator {}", operator);
             return null;
@@ -53,10 +49,9 @@ public class RouteSelectionService {
     }
 
     /**
-     * Récupère et trie les routes par score
+     * Récupère les routes disponibles et les trie par score
      */
     private List<Route> getSortedRoutes(String operator) {
-
         return routeRepository.findByAvailabilityTrueAndOperator(operator)
                 .stream()
                 .sorted(Comparator.comparingDouble(this::calculateScore))
@@ -68,7 +63,6 @@ public class RouteSelectionService {
      * Plus le score est bas, meilleure est la route
      */
     private double calculateScore(Route route) {
-
         double costWeight = 0.5;
         double latencyWeight = 0.3;
         double failureWeight = 0.2;

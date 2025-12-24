@@ -1,18 +1,24 @@
 package com.Api.Fidelitypay.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.Data;
+
+import java.util.List;
 
 @Entity
 @Data
+@Table(name = "country_options")
 public class CountryOption {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String country;
-    private String options; // JSON ou string séparée par virgules des opérateurs
+    @Column(nullable = false, unique = true, length = 2)
+    private String country; // "ML", "SN", etc.
+
+    @ElementCollection
+    @CollectionTable(name = "country_operator_options", joinColumns = @JoinColumn(name = "country_option_id"))
+    @Column(name = "operator")
+    private List<String> operators;
 }

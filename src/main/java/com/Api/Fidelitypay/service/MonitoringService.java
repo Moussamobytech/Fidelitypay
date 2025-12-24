@@ -1,17 +1,14 @@
 package com.Api.Fidelitypay.service;
 
-
-// package com.fidelitypay.service;
-
 import com.Api.Fidelitypay.integration.PayDunyaClient;
-import com.Api.Fidelitypay.integration.SamirPayClient;
+import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.repository.RouteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.List;  // Added this import to fix the error
+import java.util.List;
 
 @Service
 public class MonitoringService {
@@ -20,24 +17,32 @@ public class MonitoringService {
     private RouteRepository routeRepository;
 
     @Autowired
-    private SamirPayClient samirPayClient;
+    private KkiapayClient samirPayClient;
 
     @Autowired
     private PayDunyaClient payDunyaClient;
 
-    @Scheduled(fixedRate = 300000) // Toutes les 5 minutes
+    @Scheduled(fixedRate = 300000) // toutes les 5 minutes
     public void checkRoutes() {
-        // Pour chaque route, ping l'API externe
         List<Route> routes = routeRepository.findAll();
         for (Route route : routes) {
             boolean isUp = false;
-            if (route.getName().contains("SamirPay")) {
+            double latencyMs = 0.0;
+            long start = System.nanoTime();
+
+            // Vérification de la disponibilité selon le provider
+            if ("SAMIRPAY".equalsIgnoreCase(route.getProvider())) {
                 isUp = samirPayClient.isAvailable();
-            } else if (route.getName().contains("PayDunya")) {
+            } else if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
                 isUp = payDunyaClient.isAvailable();
             }
-            // Mettre à jour availability et averageResponseTime (mesurer temps)
+
+            long end = System.nanoTime();
+            latencyMs = (end - start) / 1_000_000.0;
+
+            // Mise à jour de la route
             route.setAvailability(isUp);
+            route.setAvgLatency(latencyMs);
             routeRepository.save(route);
         }
     }

@@ -1,18 +1,22 @@
+
 package com.Api.Fidelitypay.service;
 
+import com.Api.Fidelitypay.Enum.PaymentStatus;
+import com.Api.Fidelitypay.Enum.LogStatus;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
-import com.Api.Fidelitypay.integration.SamirPayClient;
+import com.Api.Fidelitypay.integration.PaymentResult;
+import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.Enum.PaymentStatus;
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -23,24 +27,25 @@ public class PaymentService {
     private final LogEntryRepository logEntryRepository;
     private final RouteSelectionService routeSelectionService;
     private final WebhookService webhookService;
-    private final SamirPayClient samirPayClient;
+    private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
 
-    public PaymentService(
-            PaymentRepository paymentRepository,
-            LogEntryRepository logEntryRepository,
-            RouteSelectionService routeSelectionService,
-            WebhookService webhookService,
-            SamirPayClient samirPayClient,
-            PayDunyaClient payDunyaClient) {
-        this.paymentRepository = paymentRepository;
-        this.logEntryRepository = logEntryRepository;
-        this.routeSelectionService = routeSelectionService;
-        this.webhookService = webhookService;
-        this.samirPayClient = samirPayClient;
-        this.payDunyaClient = payDunyaClient;
-    }
+public PaymentService(
+        PaymentRepository paymentRepository,
+        LogEntryRepository logEntryRepository,
+        RouteSelectionService routeSelectionService,
+        WebhookService webhookService,
+        KkiapayClient kkiapayClient,
+        PayDunyaClient payDunyaClient) {
+    this.paymentRepository = paymentRepository;
+    this.logEntryRepository = logEntryRepository;
+    this.routeSelectionService = routeSelectionService;
+    this.webhookService = webhookService;
+    this.kkiapayClient = kkiapayClient;
+    this.payDunyaClient = payDunyaClient;
+}
 
+    // Options disponibles par pays
     public List<String> getOptionsByCountry(String country) {
         return List.of("OM", "Wave", "Moov", "Orange Money");
     }
@@ -52,39 +57,50 @@ public class PaymentService {
         Payment payment = new Payment();
         payment.setPaymentId(paymentId);
         payment.setOperator(operator);
-        payment.setAmount(amount);
+        payment.setAmount(BigDecimal.valueOf(amount));
         payment.setCurrency("XOF");
         payment.setStatus(PaymentStatus.PENDING);
-        // Timestamp is handled by @CreationTimestamp in Payment entity
+        payment.setCost(BigDecimal.ZERO);
+
         paymentRepository.save(payment);
 
+        // Sélection de la meilleure route
         Route primaryRoute = routeSelectionService.selectBestRoute(operator);
-
         if (primaryRoute == null) {
             log.warn("No route available for operator {}", operator);
             payment.setStatus(PaymentStatus.FAILED);
             return paymentRepository.save(payment);
         }
 
-        boolean success = executeRoute(primaryRoute, amount, country, operator);
         Route routeUsed = primaryRoute;
+        PaymentResult result = executeRoute(primaryRoute, amount, country, operator);
+        boolean success = result != null && result.isSuccess();
 
+        // Fallback si la route primaire échoue
         if (!success) {
-            log.warn("Primary route {} failed, trying fallback", primaryRoute.getName());
             Route fallback = routeSelectionService.selectFallbackRoute(operator);
             if (fallback != null && !fallback.getName().equals(primaryRoute.getName())) {
-                success = executeRoute(fallback, amount, country, operator);
-                if (success) {
+                result = executeRoute(fallback, amount, country, operator);
+                if (result != null && result.isSuccess()) {
+                    success = true;
                     routeUsed = fallback;
                 }
             }
         }
 
         payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
-        payment.setCost(success ? routeUsed.getCost() : 0.0);
+        payment.setCost(BigDecimal.valueOf(success ? routeUsed.getCost() : 0.0));
+
+        if (result != null) {
+            payment.setProviderPaymentId(result.getProviderId());
+            payment.setProviderResponse(result.getRawResponse());
+            payment.setPaymentUrl(result.getPaymentUrl());
+            payment.setProviderResponseTimeMs((long) result.getResponseTimeMs());
+        }
+
         paymentRepository.save(payment);
 
-        saveLog(paymentId, routeUsed.getName(), success);
+        saveLog(paymentId, routeUsed, result, success);
 
         if (success) {
             webhookService.sendWebhook(payment);
@@ -93,27 +109,31 @@ public class PaymentService {
         return payment;
     }
 
-    private boolean executeRoute(Route route, double amount, String country, String operator) {
-        if (route.getName().contains("SamirPay")) {
-            return samirPayClient.initiatePayment(amount, country, operator);
-        }
-        if (route.getName().contains("PayDunya")) {
-            return payDunyaClient.initiatePayment(amount, country, operator);
-        }
-        return false;
+   private PaymentResult executeRoute(Route route, double amount, String country, String operator) {
+
+    if ("KKIAPAY".equalsIgnoreCase(route.getProvider())) {
+        return kkiapayClient.initiatePayment(amount, country, operator);
     }
 
-    private void saveLog(String paymentId, String routeUsed, boolean success) {
+    if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
+        return payDunyaClient.initiatePayment(amount, country, operator);
+    }
+
+    log.warn("Unsupported provider {}", route.getProvider());
+    return null;
+}
+
+    private void saveLog(String paymentId, Route routeUsed, PaymentResult result, boolean success) {
         LogEntry log = new LogEntry();
         log.setPaymentId(paymentId);
-        log.setRouteUsed(routeUsed);
-        log.setResponseTime(120.0);
-        log.setStatus(success ? "SUCCESS" : "FAILED");
-        log.setTimestamp(LocalDateTime.now());
+        log.setRouteUsed(routeUsed.getName());
+        log.setResponseTime(result != null ? result.getResponseTimeMs() : 0.0);
+        log.setStatus(success ? LogStatus.SUCCESS : LogStatus.FAILED);
         logEntryRepository.save(log);
     }
 
     public Payment getPaymentStatus(String paymentId) {
-        return paymentRepository.findByPaymentId(paymentId);
+        Optional<Payment> paymentOpt = paymentRepository.findByPaymentId(paymentId);
+        return paymentOpt.orElse(null);
     }
 }

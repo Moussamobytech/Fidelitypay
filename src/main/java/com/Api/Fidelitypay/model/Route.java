@@ -5,6 +5,11 @@ import lombok.Data;
 
 @Entity
 @Data
+@Table(name = "routes", indexes = {
+        @Index(name = "idx_operator_availability", columnList = "operator, availability"),
+        @Index(name = "idx_provider", columnList = "provider"),
+        @Index(name = "idx_name", columnList = "name")
+})
 public class Route {
 
     @Id
@@ -12,25 +17,38 @@ public class Route {
     private Long id;
 
     // Exemple : SAMIRPAY_OM, PAYDUNYA_WAVE
+    @Column(nullable = false, unique = true)
     private String name;
 
     // OM, WAVE, MOOV
+    @Column(nullable = false)
     private String operator;
 
     // SAMIRPAY, PAYDUNYA
+    @Column(nullable = false)
     private String provider;
 
-    private boolean availability;
+    // Disponibilité actuelle de la route
+    @Column(nullable = false)
+    private boolean availability = true;
 
     // Coût de transaction
-    private double cost;
+    @Column(nullable = false)
+    private double cost = 0.0;
 
     // Temps moyen de réponse (ms)
-    private double avgLatency;
+    @Column(nullable = false)
+    private double avgLatency = 0.0;
 
     // Taux d’échec (0 → 1)
-    private double failureRate;
+    @Column(nullable = false)
+    private double failureRate = 0.0;
 
     // Priorité manuelle (plus petit = meilleur)
-    private int priority;
+    @Column(nullable = false)
+    private int priority = 0;
+
+    // Optionnel : score calculé pour tri rapide
+    @Transient
+    private double score;
 }

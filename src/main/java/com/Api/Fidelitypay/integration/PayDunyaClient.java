@@ -50,10 +50,10 @@ public class PayDunyaClient {
     }
 
     /**
-     * Initie un paiement PayDunya
+     * Initie un paiement PayDunya et renvoie un objet décrit la réponse
      */
-    public boolean initiatePayment(double amount, String country, String operator) {
-
+    public PaymentResult initiatePayment(double amount, String country, String operator) {
+        long start = System.nanoTime();
         try {
             // 1️⃣ Headers de sécurité PayDunya
             HttpHeaders headers = new HttpHeaders();
@@ -72,24 +72,51 @@ public class PayDunyaClient {
             HttpEntity<PayDunyaRequest> entity = new HttpEntity<>(request, headers);
 
             // 3️⃣ API Call
+            long callStart = System.nanoTime();
             ResponseEntity<String> response = restTemplate.exchange(
                     baseUrl + "/checkout-invoice",
                     Objects.requireNonNull(HttpMethod.POST),
                     entity,
                     String.class);
+            long callEnd = System.nanoTime();
 
-            // 4️⃣ Validation réponse
-            if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("PayDunya payment initiated successfully | Amount={}", amount);
-                return true;
+            double elapsedMs = (callEnd - callStart) / 1_000_000.0;
+
+            // 4️⃣ Build result
+            PaymentResult result = new PaymentResult();
+            result.setRawResponse(response.getBody());
+            result.setResponseTimeMs(elapsedMs);
+            result.setSuccess(response.getStatusCode().is2xxSuccessful());
+
+            try {
+                String body = response.getBody();
+                if (body != null) {
+                    if (body.contains("invoice_id")) {
+                        result.setProviderId("extracted-invoice-id");
+                    }
+                    if (body.contains("url")) {
+                        result.setPaymentUrl("extracted-url");
+                    }
+                }
+            } catch (Exception ignored) {
             }
 
-            log.warn("PayDunya payment failed | Status={}", response.getStatusCode());
-            return false;
+            if (result.isSuccess()) {
+                log.info("PayDunya payment initiated successfully | Amount={} | timeMs={}", amount, elapsedMs);
+            } else {
+                log.warn("PayDunya payment failed | Status={} | timeMs={}", response.getStatusCode(), elapsedMs);
+            }
+
+            return result;
 
         } catch (Exception e) {
-            log.error("PayDunya payment error", e);
-            return false;
+            long end = System.nanoTime();
+            double elapsedMs = (end - start) / 1_000_000.0;
+            log.error("PayDunya payment error | timeMs={}", elapsedMs, e);
+            PaymentResult result = new PaymentResult(false);
+            result.setResponseTimeMs(elapsedMs);
+            result.setRawResponse(e.getMessage());
+            return result;
         }
     }
 }

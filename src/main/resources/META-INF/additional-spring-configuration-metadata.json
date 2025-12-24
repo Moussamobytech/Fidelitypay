@@ -1,0 +1,54 @@
+{
+    "properties": [
+        {
+            "name": "paydunya.api.base-url",
+            "type": "java.lang.String",
+            "description": "Base URL for PayDunya API."
+        },
+        {
+            "name": "paydunya.api.public-key",
+            "type": "java.lang.String",
+            "description": "Public key for PayDunya API."
+        },
+        {
+            "name": "paydunya.api.private-key",
+            "type": "java.lang.String",
+            "description": "Private key for PayDunya API."
+        },
+        {
+            "name": "paydunya.api.token",
+            "type": "java.lang.String",
+            "description": "Master token for PayDunya API."
+        },
+        {
+            "name": "paydunya.store.name",
+            "type": "java.lang.String",
+            "description": "Store name for PayDunya integration."
+        },
+        {
+            "name": "samirpay.api.base-url",
+            "type": "java.lang.String",
+            "description": "Base URL for SamirPay API."
+        },
+        {
+            "name": "samirpay.api.public-key",
+            "type": "java.lang.String",
+            "description": "Public key for SamirPay API."
+        },
+        {
+            "name": "samirpay.api.private-key",
+            "type": "java.lang.String",
+            "description": "Private key for SamirPay API."
+        },
+        {
+            "name": "samirpay.api.token",
+            "type": "java.lang.String",
+            "description": "Token for SamirPay API."
+        },
+        {
+            "name": "samirpay.store.name",
+            "type": "java.lang.String",
+            "description": "Store name for SamirPay integration."
+        }
+    ]
+}
