@@ -31,7 +31,7 @@ public class MonitoringService {
             long start = System.nanoTime();
 
             // Vérification de la disponibilité selon le provider
-            if ("SAMIRPAY".equalsIgnoreCase(route.getProvider())) {
+            if ("Kkiapay".equalsIgnoreCase(route.getProvider())) {
                 isUp = samirPayClient.isAvailable();
             } else if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
                 isUp = payDunyaClient.isAvailable();

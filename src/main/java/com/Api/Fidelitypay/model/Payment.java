@@ -11,14 +11,11 @@ import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(
-    name = "payments",
-    indexes = {
+@Table(name = "payments", indexes = {
         @Index(name = "idx_payment_payment_id", columnList = "paymentId"),
         @Index(name = "idx_payment_status", columnList = "status"),
         @Index(name = "idx_payment_operator", columnList = "operator")
-    }
-)
+})
 public class Payment {
 
     @Id
@@ -33,11 +30,11 @@ public class Payment {
     private String operator;
 
     /** Agrégateur réellement utilisé (SamirPay, PayDunya) */
-    @Column(nullable = false)
+    @Column
     private String provider;
 
     /** Route technique utilisée */
-    @Column(nullable = false)
+    @Column
     private String routeName;
 
     @Enumerated(EnumType.STRING)
@@ -56,7 +53,7 @@ public class Payment {
     private String currency;
 
     /** Pays du paiement */
-    @Column(nullable = false, length = 2)
+    @Column(nullable = false, length = 50)
     private String country;
 
     /** Tentatives (fallback / retry) */

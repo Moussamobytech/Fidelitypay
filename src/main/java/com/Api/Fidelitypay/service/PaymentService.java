@@ -1,4 +1,3 @@
-
 package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.Enum.PaymentStatus;
@@ -15,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,53 +30,64 @@ public class PaymentService {
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
 
-public PaymentService(
-        PaymentRepository paymentRepository,
-        LogEntryRepository logEntryRepository,
-        RouteSelectionService routeSelectionService,
-        WebhookService webhookService,
-        KkiapayClient kkiapayClient,
-        PayDunyaClient payDunyaClient) {
-    this.paymentRepository = paymentRepository;
-    this.logEntryRepository = logEntryRepository;
-    this.routeSelectionService = routeSelectionService;
-    this.webhookService = webhookService;
-    this.kkiapayClient = kkiapayClient;
-    this.payDunyaClient = payDunyaClient;
-}
-
-    // Options disponibles par pays
-    public List<String> getOptionsByCountry(String country) {
-        return List.of("OM", "Wave", "Moov", "Orange Money");
+    public PaymentService(
+            PaymentRepository paymentRepository,
+            LogEntryRepository logEntryRepository,
+            RouteSelectionService routeSelectionService,
+            WebhookService webhookService,
+            KkiapayClient kkiapayClient,
+            PayDunyaClient payDunyaClient) {
+        this.paymentRepository = paymentRepository;
+        this.logEntryRepository = logEntryRepository;
+        this.routeSelectionService = routeSelectionService;
+        this.webhookService = webhookService;
+        this.kkiapayClient = kkiapayClient;
+        this.payDunyaClient = payDunyaClient;
     }
 
+    /**
+     * Options disponibles par pays
+     */
+    public List<String> getOptionsByCountry(String country) {
+        return List.of("Kkiapay","Dunyapay", "Wave", "Moov", "Orange Money");
+    }
+
+    /**
+     * Initie un paiement
+     */
     public Payment initiatePayment(double amount, String country, String operator) {
 
         String paymentId = UUID.randomUUID().toString();
 
+        // Création du paiement avec toutes les colonnes essentielles
         Payment payment = new Payment();
         payment.setPaymentId(paymentId);
-        payment.setOperator(operator);
+        payment.setOperator(operator != null ? operator : "UNKNOWN");
         payment.setAmount(BigDecimal.valueOf(amount));
         payment.setCurrency("XOF");
         payment.setStatus(PaymentStatus.PENDING);
         payment.setCost(BigDecimal.ZERO);
+        payment.setCountry(country != null ? country : "UNKNOWN");
+        payment.setCreatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now());
 
+        // Sauvegarde initiale
         paymentRepository.save(payment);
 
-        // Sélection de la meilleure route
+        // Sélection de la route primaire
         Route primaryRoute = routeSelectionService.selectBestRoute(operator);
         if (primaryRoute == null) {
             log.warn("No route available for operator {}", operator);
             payment.setStatus(PaymentStatus.FAILED);
-            return paymentRepository.save(payment);
+            paymentRepository.save(payment);
+            return payment;
         }
 
         Route routeUsed = primaryRoute;
         PaymentResult result = executeRoute(primaryRoute, amount, country, operator);
         boolean success = result != null && result.isSuccess();
 
-        // Fallback si la route primaire échoue
+        // Route de fallback si nécessaire
         if (!success) {
             Route fallback = routeSelectionService.selectFallbackRoute(operator);
             if (fallback != null && !fallback.getName().equals(primaryRoute.getName())) {
@@ -88,6 +99,7 @@ public PaymentService(
             }
         }
 
+        // Mise à jour du paiement avec résultat
         payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
         payment.setCost(BigDecimal.valueOf(success ? routeUsed.getCost() : 0.0));
 
@@ -96,12 +108,17 @@ public PaymentService(
             payment.setProviderResponse(result.getRawResponse());
             payment.setPaymentUrl(result.getPaymentUrl());
             payment.setProviderResponseTimeMs((long) result.getResponseTimeMs());
+            payment.setProvider(routeUsed.getProvider());
+            payment.setRouteName(routeUsed.getName());
         }
 
+        payment.setUpdatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
+        // Log de la transaction
         saveLog(paymentId, routeUsed, result, success);
 
+        // Webhook si succès
         if (success) {
             webhookService.sendWebhook(payment);
         }
@@ -109,29 +126,32 @@ public PaymentService(
         return payment;
     }
 
-   private PaymentResult executeRoute(Route route, double amount, String country, String operator) {
+    private PaymentResult executeRoute(Route route, double amount, String country, String operator) {
+        if (route == null) return null;
 
-    if ("KKIAPAY".equalsIgnoreCase(route.getProvider())) {
-        return kkiapayClient.initiatePayment(amount, country, operator);
+        switch (route.getProvider().toUpperCase()) {
+            case "KKIAPAY":
+                return kkiapayClient.initiatePayment(amount, country, operator);
+            case "PAYDUNYA":
+                return payDunyaClient.initiatePayment(amount, country, operator);
+            default:
+                log.warn("Unsupported provider {}", route.getProvider());
+                return null;
+        }
     }
-
-    if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
-        return payDunyaClient.initiatePayment(amount, country, operator);
-    }
-
-    log.warn("Unsupported provider {}", route.getProvider());
-    return null;
-}
 
     private void saveLog(String paymentId, Route routeUsed, PaymentResult result, boolean success) {
         LogEntry log = new LogEntry();
         log.setPaymentId(paymentId);
-        log.setRouteUsed(routeUsed.getName());
+        log.setRouteUsed(routeUsed != null ? routeUsed.getName() : "UNKNOWN");
         log.setResponseTime(result != null ? result.getResponseTimeMs() : 0.0);
         log.setStatus(success ? LogStatus.SUCCESS : LogStatus.FAILED);
         logEntryRepository.save(log);
     }
 
+    /**
+     * Récupération du statut d’un paiement
+     */
     public Payment getPaymentStatus(String paymentId) {
         Optional<Payment> paymentOpt = paymentRepository.findByPaymentId(paymentId);
         return paymentOpt.orElse(null);
