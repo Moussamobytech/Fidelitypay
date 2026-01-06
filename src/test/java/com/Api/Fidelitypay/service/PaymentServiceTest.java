@@ -34,7 +34,8 @@ class PaymentServiceTest {
         samirPayClient = mock(KkiapayClient.class);
         payDunyaClient = mock(PayDunyaClient.class);
 
-        paymentService = new PaymentService(paymentRepository, logEntryRepository, routeSelectionService, webhookService, samirPayClient, payDunyaClient);
+        paymentService = new PaymentService(paymentRepository, logEntryRepository, routeSelectionService,
+                webhookService, samirPayClient, payDunyaClient);
     }
 
     @Test
@@ -50,12 +51,12 @@ class PaymentServiceTest {
         pr.setRawResponse("{\"status\":\"ok\"}");
         pr.setResponseTimeMs(150.0);
 
-        when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString())).thenReturn(pr);
+        when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString())).thenReturn(pr);
 
         Payment saved = new Payment();
         when(paymentRepository.save(any())).thenReturn(saved);
 
-        Payment res = paymentService.initiatePayment(100.0, "SN", "WAVE");
+        Payment res = paymentService.initiatePayment(100.0, "SN", "WAVE", "221770000000");
 
         assertNotNull(res);
         assertEquals(PaymentStatus.SUCCESS, res.getStatus());

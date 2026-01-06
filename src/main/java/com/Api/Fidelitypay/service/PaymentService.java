@@ -55,7 +55,7 @@ public class PaymentService {
     /**
      * Initie un paiement
      */
-    public Payment initiatePayment(double amount, String country, String operatorInput) {
+    public Payment initiatePayment(double amount, String country, String operatorInput, String phone) {
 
         // Normalisation : On met tout en MAJUSCULE pour éviter les erreurs (mali ->
         // MALI)
@@ -89,14 +89,14 @@ public class PaymentService {
         }
 
         Route routeUsed = primaryRoute;
-        PaymentResult result = executeRoute(primaryRoute, amount, countryCode, operator);
+        PaymentResult result = executeRoute(primaryRoute, amount, countryCode, operator, phone);
         boolean success = result != null && result.isSuccess();
 
         // Route de fallback si nécessaire
         if (!success) {
             Route fallback = routeSelectionService.selectFallbackRoute(operator);
             if (fallback != null && !fallback.getName().equals(primaryRoute.getName())) {
-                result = executeRoute(fallback, amount, countryCode, operator);
+                result = executeRoute(fallback, amount, countryCode, operator, phone);
                 if (result != null && result.isSuccess()) {
                     success = true;
                     routeUsed = fallback;
@@ -133,15 +133,15 @@ public class PaymentService {
         return payment;
     }
 
-    private PaymentResult executeRoute(Route route, double amount, String country, String operator) {
+    private PaymentResult executeRoute(Route route, double amount, String country, String operator, String phone) {
         if (route == null)
             return null;
 
         switch (route.getProvider().toUpperCase()) {
             case "KKIAPAY":
-                return kkiapayClient.initiatePayment(amount, country, operator);
+                return kkiapayClient.initiatePayment(amount, country, operator, phone);
             case "PAYDUNYA":
-                return payDunyaClient.initiatePayment(amount, country, operator);
+                return payDunyaClient.initiatePayment(amount, country, operator, phone);
             default:
                 log.warn("Unsupported provider {}", route.getProvider());
                 return null;

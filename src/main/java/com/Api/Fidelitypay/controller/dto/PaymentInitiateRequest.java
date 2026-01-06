@@ -19,6 +19,9 @@ public class PaymentInitiateRequest {
     @NotBlank
     private String operator;
 
+    @NotBlank
+    private String phone;
+
     public PaymentInitiateRequest() {
     }
 
@@ -44,5 +47,13 @@ public class PaymentInitiateRequest {
 
     public void setOperator(String operator) {
         this.operator = operator;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

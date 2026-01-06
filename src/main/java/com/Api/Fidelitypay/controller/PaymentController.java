@@ -65,8 +65,7 @@ public class PaymentController {
             @RequestParam String country) {
 
         return ResponseEntity.ok(
-                paymentService.getOptionsByCountry(country)
-        );
+                paymentService.getOptionsByCountry(country));
     }
 
     /**
@@ -79,8 +78,8 @@ public class PaymentController {
         Payment payment = paymentService.initiatePayment(
                 request.getAmount(),
                 request.getCountry(),
-                request.getOperator()
-        );
+                request.getOperator(),
+                request.getPhone());
 
         return ResponseEntity.ok(payment);
     }

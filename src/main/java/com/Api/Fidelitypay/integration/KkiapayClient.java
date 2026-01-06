@@ -1,5 +1,8 @@
 package com.Api.Fidelitypay.integration;
 
+import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayRequestDTO;
+import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayResponseDTO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -11,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 public class KkiapayClient {
 
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${kkiapay.api.base-url}")
     private String baseUrl;
@@ -20,6 +24,9 @@ public class KkiapayClient {
 
     @Value("${kkiapay.api.private-key}")
     private String privateKey;
+
+    @Value("${kkiapay.api.secret-key}")
+    private String secretKey;
 
     public KkiapayClient(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
@@ -36,7 +43,7 @@ public class KkiapayClient {
     /**
      * Initie un paiement via KKiaPay
      */
-    public PaymentResult initiatePayment(double amount, String country, String operator) {
+    public PaymentResult initiatePayment(double amount, String country, String operator, String phone) {
         long start = System.nanoTime();
 
         try {
@@ -44,20 +51,21 @@ public class KkiapayClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-PRIVATE-KEY", privateKey);
             headers.set("X-API-KEY", publicKey);
-            headers.set("X-SECRET-KEY", privateKey);
+            headers.set("X-SECRET-KEY", secretKey);
 
-            java.util.Map<String, Object> body = java.util.Map.of(
-                    "amount", (int) amount,
-                    "callback", "http://localhost:8080/callback",
-                    "phone", "60000000",
-                    "reason", "Payment for " + operator,
-                    "firstname", "John",
-                    "lastname", "Doe");
+            KkiapayRequestDTO requestDTO = KkiapayRequestDTO.builder()
+                    .amount((int) amount)
+                    .callback("http://localhost:8080/callback")
+                    .phone(phone)
+                    .reason("Payment for " + operator)
+                    .firstname("John")
+                    .lastname("Doe")
+                    .build();
 
-            HttpEntity<java.util.Map<String, Object>> entity = new HttpEntity<>(body, headers);
+            HttpEntity<KkiapayRequestDTO> entity = new HttpEntity<>(requestDTO, headers);
 
             ResponseEntity<String> response = restTemplate.postForEntity(
-                    baseUrl + "/api/v1/payments",
+                    baseUrl + "/api/v1/transactions",
                     entity,
                     String.class);
 
@@ -68,16 +76,35 @@ public class KkiapayClient {
             result.setResponseTimeMs(elapsedMs);
 
             // Vérification de succès technique ET logique
-            // Kkiapay peut renvoyer 200 OK avec un statut "FAILED" dans le corps
-            boolean httpSuccess = response.getStatusCode().is2xxSuccessful();
-            // Adaptez cette condition selon la vraie réponse JSON de Kkiapay
-            // (ex: cherche "status":"SUCCESS" ou "transactionId")
-            String responseBody = response.getBody();
-            boolean logicSuccess = responseBody != null && !responseBody.contains("error");
 
-            result.setSuccess(httpSuccess && logicSuccess);
+            // Verify content type to avoid HTML pages (dashboard login) being interpreted
+            // as success
+            MediaType contentType = response.getHeaders().getContentType();
+            boolean isHtml = contentType != null && contentType.isCompatibleWith(MediaType.TEXT_HTML);
+
+            boolean httpSuccess = response.getStatusCode().is2xxSuccessful();
+
+            // Parse response
+            KkiapayResponseDTO kkiapayResponse = null;
+            try {
+                if (response.getBody() != null && !isHtml) {
+                    kkiapayResponse = objectMapper.readValue(response.getBody(), KkiapayResponseDTO.class);
+                }
+            } catch (Exception e) {
+                log.warn("Could not parse Kkiapay JSON response");
+            }
+
+            // Logic success check
+            boolean logicSuccess = httpSuccess && !isHtml && kkiapayResponse != null
+                    && (kkiapayResponse.getStatus() == null || !"FAILED".equalsIgnoreCase(kkiapayResponse.getStatus()));
+
+            result.setSuccess(logicSuccess);
 
             if (result.isSuccess()) {
+                if (kkiapayResponse != null) {
+                    result.setProviderId(kkiapayResponse.getTransactionId());
+                    result.setPaymentUrl(kkiapayResponse.getUrl());
+                }
                 log.info("KKiaPay success | amount={} | timeMs={}", amount, elapsedMs);
             } else {
                 log.error("KKiaPay failed | status={} | response={}", response.getStatusCode(), response.getBody());

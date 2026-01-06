@@ -64,7 +64,8 @@ class PaymentControllerTest {
         req.setCountry("SN");
         req.setOperator("WAVE");
 
-        when(paymentService.initiatePayment(anyDouble(), anyString(), anyString())).thenReturn(new Payment());
+        when(paymentService.initiatePayment(anyDouble(), anyString(), anyString(), anyString()))
+                .thenReturn(new Payment());
 
         mockMvc.perform(post("/api/payments/initiate")
                 .contentType(MediaType.APPLICATION_JSON)
