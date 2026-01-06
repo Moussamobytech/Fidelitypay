@@ -1,5 +1,84 @@
-INSERT IGNORE INTO routes (name, operator, provider, availability, cost, avg_latency, failure_rate, priority) VALUES 
-('PAYDUNYA_WAVE', 'WAVE', 'PAYDUNYA', true, 10.0, 200.0, 0.01, 1),
-('KKIAPAY_MTN', 'MTN', 'KKIAPAY', true, 15.0, 300.0, 0.02, 1),
-('PAYDUNYA_ORANGE', 'ORANGE', 'PAYDUNYA', true, 12.0, 250.0, 0.05, 1),
-('KKIAPAY_WAVE_BACKUP', 'WAVE', 'KKIAPAY', true, 20.0, 400.0, 0.0, 2);
+-- ============================
+-- ROUTES WAVE
+-- ============================
+
+INSERT IGNORE INTO routes (
+  name,
+  operator,
+  provider,
+  availability,
+  avg_latency,
+  cost,
+  failure_rate,
+  priority
+) VALUES
+(
+  'PAYDUNYA_WAVE',
+  'WAVE',
+  'PAYDUNYA',
+  true,
+  0,
+  1.5,
+  0.02,
+  1
+),
+(
+  'KKIAPAY_WAVE',
+  'WAVE',
+  'KKIAPAY',
+  true,
+  0,
+  1.8,
+  0.05,
+  2
+);
+
+-- ============================
+-- ROUTES ORANGE MONEY
+-- ============================
+
+INSERT IGNORE INTO routes (
+  name,
+  operator,
+  provider,
+  availability,
+  avg_latency,
+  cost,
+  failure_rate,
+  priority
+) VALUES
+(
+  'PAYDUNYA_OM',
+  'OM',
+  'PAYDUNYA',
+  true,
+  0,
+  1.2,
+  0.01,
+  1
+);
+
+-- ============================
+-- ROUTES MOOV
+-- ============================
+
+INSERT IGNORE INTO routes (
+  name,
+  operator,
+  provider,
+  availability,
+  avg_latency,
+  cost,
+  failure_rate,
+  priority
+) VALUES
+(
+  'KKIAPAY_MOOV',
+  'MOOV',
+  'KKIAPAY',
+  true,
+  0,
+  1.3,
+  0.03,
+  1
+);

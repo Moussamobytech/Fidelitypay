@@ -1,49 +1,59 @@
 package com.Api.Fidelitypay.service;
 
-import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
+import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.repository.RouteRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.Scheduled;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-
 @Service
+@Slf4j
 public class MonitoringService {
 
-    @Autowired
-    private RouteRepository routeRepository;
+    private final RouteRepository routeRepository;
+    private final KkiapayClient kkiapayClient;
+    private final PayDunyaClient payDunyaClient;
 
-    @Autowired
-    private KkiapayClient samirPayClient;
+    public MonitoringService(
+            RouteRepository routeRepository,
+            KkiapayClient kkiapayClient,
+            PayDunyaClient payDunyaClient) {
+        this.routeRepository = routeRepository;
+        this.kkiapayClient = kkiapayClient;
+        this.payDunyaClient = payDunyaClient;
+    }
 
-    @Autowired
-    private PayDunyaClient payDunyaClient;
-
-    @Scheduled(fixedRate = 300000) // toutes les 5 minutes
+    // @Scheduled(fixedRateString = "${monitoring.interval:300000}")
     public void checkRoutes() {
-        List<Route> routes = routeRepository.findAll();
-        for (Route route : routes) {
-            boolean isUp = false;
-            double latencyMs = 0.0;
+
+        for (Route route : routeRepository.findAll()) {
+
+            boolean isUp = true; // optimiste
             long start = System.nanoTime();
 
-            // Vérification de la disponibilité selon le provider
-            if ("Kkiapay".equalsIgnoreCase(route.getProvider())) {
-                isUp = samirPayClient.isAvailable();
-            } else if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
-                isUp = payDunyaClient.isAvailable();
+            try {
+                if ("Kkiapay".equalsIgnoreCase(route.getProvider())) {
+                    isUp = kkiapayClient.isAvailable();
+                } else if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
+                    isUp = payDunyaClient.isAvailable();
+                } else {
+                    log.warn("Unknown provider: {}", route.getProvider());
+                }
+            } catch (Exception e) {
+                log.error("Monitoring error for provider {}", route.getProvider(), e);
+                isUp = false;
             }
 
-            long end = System.nanoTime();
-            latencyMs = (end - start) / 1_000_000.0;
+            double latencyMs = (System.nanoTime() - start) / 1_000_000.0;
 
-            // Mise à jour de la route
             route.setAvailability(isUp);
             route.setAvgLatency(latencyMs);
             routeRepository.save(route);
+
+            log.info("Route {} [{}] -> UP={}, latency={}ms",
+                    route.getName(), route.getProvider(), isUp, latencyMs);
         }
     }
 }

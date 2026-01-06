@@ -49,25 +49,30 @@ public class PaymentService {
      * Options disponibles par pays
      */
     public List<String> getOptionsByCountry(String country) {
-        return List.of("Kkiapay","Dunyapay", "Wave", "Moov", "Orange Money");
+        return List.of("Kkiapay", "Dunyapay", "Wave", "Moov", "Orange Money");
     }
 
     /**
      * Initie un paiement
      */
-    public Payment initiatePayment(double amount, String country, String operator) {
+    public Payment initiatePayment(double amount, String country, String operatorInput) {
+
+        // Normalisation : On met tout en MAJUSCULE pour éviter les erreurs (mali ->
+        // MALI)
+        String operator = (operatorInput != null) ? operatorInput.toUpperCase().trim() : "UNKNOWN";
+        String countryCode = (country != null) ? country.toUpperCase().trim() : "UNKNOWN";
 
         String paymentId = UUID.randomUUID().toString();
 
         // Création du paiement avec toutes les colonnes essentielles
         Payment payment = new Payment();
         payment.setPaymentId(paymentId);
-        payment.setOperator(operator != null ? operator : "UNKNOWN");
+        payment.setOperator(operator);
         payment.setAmount(BigDecimal.valueOf(amount));
         payment.setCurrency("XOF");
         payment.setStatus(PaymentStatus.PENDING);
         payment.setCost(BigDecimal.ZERO);
-        payment.setCountry(country != null ? country : "UNKNOWN");
+        payment.setCountry(countryCode);
         payment.setCreatedAt(LocalDateTime.now());
         payment.setUpdatedAt(LocalDateTime.now());
 
@@ -84,14 +89,14 @@ public class PaymentService {
         }
 
         Route routeUsed = primaryRoute;
-        PaymentResult result = executeRoute(primaryRoute, amount, country, operator);
+        PaymentResult result = executeRoute(primaryRoute, amount, countryCode, operator);
         boolean success = result != null && result.isSuccess();
 
         // Route de fallback si nécessaire
         if (!success) {
             Route fallback = routeSelectionService.selectFallbackRoute(operator);
             if (fallback != null && !fallback.getName().equals(primaryRoute.getName())) {
-                result = executeRoute(fallback, amount, country, operator);
+                result = executeRoute(fallback, amount, countryCode, operator);
                 if (result != null && result.isSuccess()) {
                     success = true;
                     routeUsed = fallback;
@@ -103,13 +108,15 @@ public class PaymentService {
         payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
         payment.setCost(BigDecimal.valueOf(success ? routeUsed.getCost() : 0.0));
 
+        // AMELIORATION : On enregistre TOUJOURS la route utilisée, même si ça a échoué
+        payment.setProvider(routeUsed.getProvider());
+        payment.setRouteName(routeUsed.getName());
+
         if (result != null) {
             payment.setProviderPaymentId(result.getProviderId());
             payment.setProviderResponse(result.getRawResponse());
             payment.setPaymentUrl(result.getPaymentUrl());
             payment.setProviderResponseTimeMs((long) result.getResponseTimeMs());
-            payment.setProvider(routeUsed.getProvider());
-            payment.setRouteName(routeUsed.getName());
         }
 
         payment.setUpdatedAt(LocalDateTime.now());
@@ -127,7 +134,8 @@ public class PaymentService {
     }
 
     private PaymentResult executeRoute(Route route, double amount, String country, String operator) {
-        if (route == null) return null;
+        if (route == null)
+            return null;
 
         switch (route.getProvider().toUpperCase()) {
             case "KKIAPAY":
