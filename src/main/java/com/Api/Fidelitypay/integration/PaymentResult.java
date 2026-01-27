@@ -1,7 +1,10 @@
 package com.Api.Fidelitypay.integration;
 
+import com.Api.Fidelitypay.Enum.ErrorType;
+
 /**
- * Lightweight DTO that represents the outcome of a provider payment initiation call.
+ * Lightweight DTO that represents the outcome of a provider payment initiation
+ * call.
  */
 public class PaymentResult {
 
@@ -10,6 +13,7 @@ public class PaymentResult {
     private String paymentUrl;
     private String rawResponse;
     private double responseTimeMs;
+    private ErrorType errorType;
 
     public PaymentResult() {
         this.success = true;
@@ -17,6 +21,14 @@ public class PaymentResult {
 
     public PaymentResult(boolean success) {
         this.success = success;
+    }
+
+    public ErrorType getErrorType() {
+        return errorType;
+    }
+
+    public void setErrorType(ErrorType errorType) {
+        this.errorType = errorType;
     }
 
     public boolean isSuccess() {

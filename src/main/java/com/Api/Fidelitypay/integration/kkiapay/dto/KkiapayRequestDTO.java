@@ -1,5 +1,6 @@
 package com.Api.Fidelitypay.integration.kkiapay.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,13 +10,19 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class KkiapayRequestDTO {
     private int amount;
-    private String callback;
-    private String phone;
-    private String reason;
+    private String phoneNumber;
+    private String country;
     private String firstname;
     private String lastname;
-    // Ajout d'email si nécessaire dans le futur
-    // private String email;
+    private String email;
+    private String name;
+    private String callback;
+    private Object stateData;
+    private String partnerId;
+    private String reason;
+    private String success_url;
+    private String error_url;
 }

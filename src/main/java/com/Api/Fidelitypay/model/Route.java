@@ -1,5 +1,6 @@
 package com.Api.Fidelitypay.model;
 
+import com.Api.Fidelitypay.Enum.ErrorType;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -44,6 +45,13 @@ public class Route {
     @Column(nullable = false)
     private double failureRate = 0.0;
 
+    // Cause du problème (si indisponible)
+    @Column(length = 500)
+    private String lastErrorMessage;
+
+    @Enumerated(EnumType.STRING)
+    private ErrorType lastErrorType;
+
     // Priorité manuelle (plus petit = meilleur)
     @Column(nullable = false)
     private int priority = 0;
@@ -51,4 +59,15 @@ public class Route {
     // Optionnel : score calculé pour tri rapide
     @Transient
     private double score;
+
+    public String getStatus() {
+        if (!this.availability) {
+            return "DOWN";
+        }
+        // Seuil: 5000ms (5s) ou 10% d'échec (0.1)
+        if (this.avgLatency > 10000 || this.failureRate > 0.05) {
+            return "DEGRADE";
+        }
+        return "STABLE";
+    }
 }

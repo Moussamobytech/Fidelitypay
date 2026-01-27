@@ -29,4 +29,7 @@ public interface LogEntryRepository extends JpaRepository<LogEntry, Long> {
 
     // Dernier log pour un paiement
     Optional<LogEntry> findFirstByPaymentIdOrderByCreatedAtDesc(String paymentId);
+
+    // Logs par route sur une période
+    List<LogEntry> findByRouteUsedAndCreatedAtAfter(String routeUsed, LocalDateTime since);
 }

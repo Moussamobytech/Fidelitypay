@@ -12,22 +12,18 @@ import org.springframework.web.client.RestTemplate;
 public class WebhookService {
 
     private final RestTemplate restTemplate;
+    private final com.Api.Fidelitypay.config.WebhookProperties webhookProperties;
 
-    /**
-     * URL du webhook (optionnelle)
-     * → ne casse pas le démarrage si absente
-     */
-    @Value("${webhook.url:}")
-    private String webhookUrl;
-
-    public WebhookService(RestTemplate restTemplate) {
+    public WebhookService(RestTemplate restTemplate, com.Api.Fidelitypay.config.WebhookProperties webhookProperties) {
         this.restTemplate = restTemplate;
+        this.webhookProperties = webhookProperties;
     }
 
     /**
      * Envoie le paiement au webhook configuré
      */
     public void sendWebhook(Payment payment) {
+        String webhookUrl = webhookProperties.getUrl();
 
         if (webhookUrl == null || webhookUrl.isBlank()) {
             log.warn(

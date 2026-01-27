@@ -52,6 +52,23 @@ Affiche les moyens de paiement disponibles pour un pays donné.
 
 ---
 
+## 4. Monitoring des Routes
+Permet de piloter et consulter l'état des routes de paiement.
+
+*   **Vérification manuelle** : `POST http://localhost:8080/api/monitoring/check` (Force un check de toutes les routes).
+*   **Liste des routes** : `GET http://localhost:8080/api/monitoring/routes` (Récupère l'état et la latence actuelle des routes).
+*   **Historique des logs** : `GET http://localhost:8080/api/monitoring/logs` (Récupère tout l'historique technique des transactions).
+
+---
+
+## 5. Lister Tous les Paiements
+Récupère l'historique complet de tous les paiements enregistrés.
+
+*   **Méthode** : `GET`
+*   **URL** : `http://localhost:8080/api/payments`
+
+---
+
 ## Codes de Statut (Base de données)
 *   `PENDING` : Paiement initié, en attente de réponse ou de validation.
 *   `SUCCESS` : Paiement réussi.

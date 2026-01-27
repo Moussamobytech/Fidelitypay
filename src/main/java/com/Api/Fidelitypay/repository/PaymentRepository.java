@@ -14,6 +14,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByPaymentId(String paymentId);
 
+    Optional<Payment> findByProviderPaymentId(String providerPaymentId);
+
     List<Payment> findByStatus(PaymentStatus status);
 
     List<Payment> findByOperator(String operator);
@@ -21,8 +23,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByOperatorAndCreatedAtBetween(
             String operator,
             LocalDateTime start,
-            LocalDateTime end
-    );
+            LocalDateTime end);
+
+    List<Payment> findAllByOrderByCreatedAtDesc();
 
     List<Payment> findByOperatorAndStatus(String operator, PaymentStatus status);
 
@@ -30,4 +33,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     // ✅ CORRIGÉ : paramètre operator obligatoire
     Optional<Payment> findFirstByOperatorOrderByCreatedAtDesc(String operator);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT p.country FROM Payment p WHERE p.country IS NOT NULL")
+    List<String> findDistinctCountries();
 }

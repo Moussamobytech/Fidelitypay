@@ -5,7 +5,10 @@ import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayResponseDTO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -15,57 +18,64 @@ public class KkiapayClient {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final com.Api.Fidelitypay.config.KkiapayProperties kkiapayProperties;
 
-    @Value("${kkiapay.api.base-url}")
-    private String baseUrl;
-
-    @Value("${kkiapay.api.public-key}")
-    private String publicKey;
-
-    @Value("${kkiapay.api.private-key}")
-    private String privateKey;
-
-    @Value("${kkiapay.api.secret-key}")
-    private String secretKey;
-
-    public KkiapayClient(RestTemplate restTemplate) {
+    public KkiapayClient(RestTemplate restTemplate, com.Api.Fidelitypay.config.KkiapayProperties kkiapayProperties) {
         this.restTemplate = restTemplate;
+        this.kkiapayProperties = kkiapayProperties;
     }
 
-    /**
-     * Vérifie la disponibilité du provider
-     */
-
+    /** Kkiapay ne fournit pas de vrai health check */
     public boolean isAvailable() {
-        return true; // éviter de désactiver les routes automatiquement
+        String baseUrl = kkiapayProperties.getApi().getBaseUrl();
+        if (baseUrl == null) {
+            return false;
+        }
+        try {
+            restTemplate.getForEntity(baseUrl, String.class);
+            return true;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            // 4xx or 5xx means server responded
+            return true;
+        }
     }
 
-    /**
-     * Initie un paiement via KKiaPay
-     */
-    public PaymentResult initiatePayment(double amount, String country, String operator, String phone) {
+    public PaymentResult initiatePayment(double amount, String country, String operator, String phone, String firstname,
+            String lastname, String email) {
         long start = System.nanoTime();
 
         try {
+            // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("X-PRIVATE-KEY", privateKey);
-            headers.set("X-API-KEY", publicKey);
-            headers.set("X-SECRET-KEY", secretKey);
+            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
 
-            KkiapayRequestDTO requestDTO = KkiapayRequestDTO.builder()
+            boolean isWave = "WAVE".equalsIgnoreCase(operator);
+            String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
+
+            // 📦 Payload
+            KkiapayRequestDTO.KkiapayRequestDTOBuilder payloadBuilder = KkiapayRequestDTO.builder()
                     .amount((int) amount)
-                    .callback("http://localhost:8080/callback")
-                    .phone(phone)
-                    .reason("Payment for " + operator)
-                    .firstname("John")
-                    .lastname("Doe")
-                    .build();
+                    .country(country)
+                    .callback(kkiapayProperties.getCallbackUrl())
+                    .reason("Payment via " + operator + " (" + country + ")");
 
-            HttpEntity<KkiapayRequestDTO> entity = new HttpEntity<>(requestDTO, headers);
+            if (isWave) {
+                payloadBuilder.email(email != null ? email : "customer@example.com")
+                        .name(firstname + " " + lastname)
+                        .success_url(kkiapayProperties.getCallbackUrl()) // Default to callback
+                        .error_url(kkiapayProperties.getCallbackUrl()); // Default to callback
+            } else {
+                payloadBuilder.phoneNumber(phone)
+                        .firstname(firstname)
+                        .lastname(lastname);
+            }
 
+            HttpEntity<KkiapayRequestDTO> entity = new HttpEntity<>(payloadBuilder.build(), headers);
+
+            // 📡 Call API
             ResponseEntity<String> response = restTemplate.postForEntity(
-                    baseUrl + "/api/v1/transactions",
+                    kkiapayProperties.getApi().getBaseUrl() + endpoint,
                     entity,
                     String.class);
 
@@ -75,51 +85,72 @@ public class KkiapayClient {
             result.setRawResponse(response.getBody());
             result.setResponseTimeMs(elapsedMs);
 
-            // Vérification de succès technique ET logique
+            // 🧠 Parse JSON
+            KkiapayResponseDTO kkiapayResponse = objectMapper.readValue(response.getBody(), KkiapayResponseDTO.class);
 
-            // Verify content type to avoid HTML pages (dashboard login) being interpreted
-            // as success
-            MediaType contentType = response.getHeaders().getContentType();
-            boolean isHtml = contentType != null && contentType.isCompatibleWith(MediaType.TEXT_HTML);
+            boolean success = response.getStatusCode().is2xxSuccessful()
+                    && kkiapayResponse != null
+                    && !"FAILED".equalsIgnoreCase(kkiapayResponse.getStatus());
 
-            boolean httpSuccess = response.getStatusCode().is2xxSuccessful();
+            result.setSuccess(success);
 
-            // Parse response
-            KkiapayResponseDTO kkiapayResponse = null;
-            try {
-                if (response.getBody() != null && !isHtml) {
-                    kkiapayResponse = objectMapper.readValue(response.getBody(), KkiapayResponseDTO.class);
-                }
-            } catch (Exception e) {
-                log.warn("Could not parse Kkiapay JSON response");
-            }
+            if (success) {
+                result.setProviderId(kkiapayResponse.getTransactionId());
+                result.setPaymentUrl(isWave ? kkiapayResponse.getWave_launch_url() : kkiapayResponse.getUrl());
 
-            // Logic success check
-            boolean logicSuccess = httpSuccess && !isHtml && kkiapayResponse != null
-                    && (kkiapayResponse.getStatus() == null || !"FAILED".equalsIgnoreCase(kkiapayResponse.getStatus()));
-
-            result.setSuccess(logicSuccess);
-
-            if (result.isSuccess()) {
-                if (kkiapayResponse != null) {
-                    result.setProviderId(kkiapayResponse.getTransactionId());
-                    result.setPaymentUrl(kkiapayResponse.getUrl());
-                }
-                log.info("KKiaPay success | amount={} | timeMs={}", amount, elapsedMs);
+                log.info("Kkiapay SUCCESS | txId={} | timeMs={}",
+                        kkiapayResponse.getTransactionId(), elapsedMs);
             } else {
-                log.error("KKiaPay failed | status={} | response={}", response.getStatusCode(), response.getBody());
+                String status = (kkiapayResponse != null) ? kkiapayResponse.getStatus() : "UNKNOWN";
+                log.warn("Kkiapay FAILED | status={} | body={}", status, response.getBody());
             }
 
             return result;
 
         } catch (Exception e) {
             double elapsedMs = (System.nanoTime() - start) / 1_000_000.0;
-            log.error("KKiaPay error | timeMs={}", elapsedMs, e);
+            log.error("Kkiapay ERROR | timeMs={}", elapsedMs, e);
 
             PaymentResult result = new PaymentResult(false);
             result.setResponseTimeMs(elapsedMs);
             result.setRawResponse(e.getMessage());
+
+            if (e instanceof java.net.SocketTimeoutException
+                    || e.getCause() instanceof java.net.SocketTimeoutException) {
+                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.TIMEOUT);
+            } else if (e instanceof java.net.UnknownHostException
+                    || e.getCause() instanceof java.net.UnknownHostException) {
+                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.NETWORK);
+            } else if (e.getMessage() != null && e.getMessage().contains("401")) {
+                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.AUTHENTICATION);
+            } else if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
+                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.PROVIDER_DOWN);
+            } else {
+                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.UNKNOWN);
+            }
+
             return result;
+        }
+    }
+
+    public KkiapayResponseDTO checkTransactionStatus(String transactionId) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+
+            String payload = "{\"transactionId\":\"" + transactionId + "\"}";
+            HttpEntity<String> entity = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<KkiapayResponseDTO> response = restTemplate.postForEntity(
+                    kkiapayProperties.getApi().getBaseUrl() + "/api/v1/transactions/status",
+                    entity,
+                    KkiapayResponseDTO.class);
+
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Error checking Kkiapay status for txId={}", transactionId, e);
+            return null;
         }
     }
 }

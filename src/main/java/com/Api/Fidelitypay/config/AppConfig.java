@@ -11,14 +11,12 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 public class AppConfig {
 
     @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder,
-                                     @Value("${http.connect.timeout:5000}") long connectTimeout,
-                                     @Value("${http.read.timeout:10000}") long readTimeout) {
+    public RestTemplate restTemplate(RestTemplateBuilder builder, HttpProperties httpProperties) {
         return builder
                 .requestFactory(() -> {
                     SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-                    factory.setConnectTimeout((int) connectTimeout);
-                    factory.setReadTimeout((int) readTimeout);
+                    factory.setConnectTimeout(httpProperties.getConnectTimeout());
+                    factory.setReadTimeout(httpProperties.getReadTimeout());
                     return factory;
                 })
                 .build();

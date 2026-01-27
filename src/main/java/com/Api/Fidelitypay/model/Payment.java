@@ -1,6 +1,8 @@
 package com.Api.Fidelitypay.model;
 
 import com.Api.Fidelitypay.Enum.PaymentStatus;
+import com.Api.Fidelitypay.Enum.ErrorType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -35,7 +37,13 @@ public class Payment {
 
     /** Route technique utilisée */
     @Column
+    @JsonProperty("route")
     private String routeName;
+
+    /** Santé de la route au moment du paiement */
+    @Column(length = 20)
+    @JsonProperty("sante")
+    private String routeHealth;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -67,7 +75,14 @@ public class Payment {
 
     private String paymentUrl;
 
+    @JsonProperty("latence")
     private Long providerResponseTimeMs;
+
+    @Column(columnDefinition = "TEXT")
+    private String failureReason;
+
+    @Enumerated(EnumType.STRING)
+    private ErrorType errorType;
 
     @CreationTimestamp
     @Column(updatable = false)

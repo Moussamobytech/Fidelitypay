@@ -7,16 +7,14 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 import com.Api.Fidelitypay.Enum.LogStatus;
+import com.Api.Fidelitypay.Enum.ErrorType;
 
 @Entity
-@Table(
-    name = "log_entries",
-    indexes = {
+@Table(name = "log_entries", indexes = {
         @Index(name = "idx_log_payment_id", columnList = "payment_id"),
         @Index(name = "idx_log_status", columnList = "status"),
         @Index(name = "idx_log_created_at", columnList = "created_at")
-    }
-)
+})
 @Getter
 @Setter
 public class LogEntry {
@@ -43,8 +41,15 @@ public class LogEntry {
     private LogStatus status;
 
     // 📝 Message technique
-    @Column(length = 500)
+    @Lob
+    @Column(columnDefinition = "TEXT")
     private String message;
+
+    @Column(length = 255)
+    private String failureReason;
+
+    @Enumerated(EnumType.STRING)
+    private ErrorType errorType;
 
     // ⏰ Date création
     @Column(name = "created_at", nullable = false, updatable = false)

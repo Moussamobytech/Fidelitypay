@@ -1,0 +1,36 @@
+package com.Api.Fidelitypay.controller;
+
+import com.Api.Fidelitypay.model.Route;
+import com.Api.Fidelitypay.service.MonitoringService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/monitoring")
+@RequiredArgsConstructor
+public class MonitoringController {
+
+    private final MonitoringService monitoringService;
+
+    @PostMapping("/check")
+    public ResponseEntity<List<Route>> triggerMonitoring() {
+        monitoringService.checkRoutes();
+        return ResponseEntity.ok(monitoringService.getAllRoutes());
+    }
+
+    @GetMapping("/routes")
+    public ResponseEntity<List<Route>> getRoutes() {
+        return ResponseEntity.ok(monitoringService.getAllRoutes());
+    }
+
+    @GetMapping("/logs")
+    public ResponseEntity<List<com.Api.Fidelitypay.model.LogEntry>> getLogs() {
+        return ResponseEntity.ok(monitoringService.getAllLogs());
+    }
+}
