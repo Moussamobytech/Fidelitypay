@@ -1,6 +1,6 @@
 package com.Api.Fidelitypay.model;
 
-import com.Api.Fidelitypay.Enum.ErrorType;
+import com.Api.Fidelitypay.enums.ErrorType;
 import jakarta.persistence.*;
 import lombok.Data;
 

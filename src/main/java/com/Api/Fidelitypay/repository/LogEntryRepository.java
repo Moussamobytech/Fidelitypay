@@ -1,6 +1,6 @@
 package com.Api.Fidelitypay.repository;
 
-import com.Api.Fidelitypay.Enum.LogStatus;
+import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.model.LogEntry;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;

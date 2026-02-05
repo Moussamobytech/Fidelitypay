@@ -3,7 +3,7 @@ package com.Api.Fidelitypay.service;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.model.Route;
-import com.Api.Fidelitypay.Enum.ErrorType;
+import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.repository.RouteRepository;
 import lombok.extern.slf4j.Slf4j;
 
@@ -103,7 +103,7 @@ public class MonitoringService {
             if (!recentLogs.isEmpty()) {
                 long total = recentLogs.size();
                 long failed = recentLogs.stream()
-                        .filter(l -> l.getStatus() == com.Api.Fidelitypay.Enum.LogStatus.FAILED).count();
+                        .filter(l -> l.getStatus() == com.Api.Fidelitypay.enums.LogStatus.FAILED).count();
                 double failureRate = (double) failed / total;
                 route.setFailureRate(failureRate);
             } else {

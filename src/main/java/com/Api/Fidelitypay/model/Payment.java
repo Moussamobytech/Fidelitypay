@@ -1,7 +1,7 @@
 package com.Api.Fidelitypay.model;
 
-import com.Api.Fidelitypay.Enum.PaymentStatus;
-import com.Api.Fidelitypay.Enum.ErrorType;
+import com.Api.Fidelitypay.enums.PaymentStatus;
+import com.Api.Fidelitypay.enums.ErrorType;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -16,7 +16,8 @@ import java.time.LocalDateTime;
 @Table(name = "payments", indexes = {
         @Index(name = "idx_payment_payment_id", columnList = "paymentId"),
         @Index(name = "idx_payment_status", columnList = "status"),
-        @Index(name = "idx_payment_operator", columnList = "operator")
+        @Index(name = "idx_payment_operator", columnList = "operator"),
+        @Index(name = "idx_payment_fallback", columnList = "usedFallback")  // Nouvel index
 })
 public class Payment {
 
@@ -27,7 +28,7 @@ public class Payment {
     @Column(nullable = false, unique = true, length = 50)
     private String paymentId;
 
-    /** Opérateur choisi par l’utilisateur (OM, Wave…) */
+    /** Opérateur choisi par l'utilisateur (OM, Wave…) */
     @Column(nullable = false)
     private String operator;
 
@@ -74,6 +75,13 @@ public class Payment {
     private String providerResponse;
 
     private String paymentUrl;
+    
+    @Column(nullable = false)
+    private boolean usedFallback = false;
+
+    /** 🔥 NOUVEAU : Raison du fallback */
+    @Column(name = "fallback_reason", length = 100)
+    private String fallbackReason;
 
     @JsonProperty("latence")
     private Long providerResponseTimeMs;

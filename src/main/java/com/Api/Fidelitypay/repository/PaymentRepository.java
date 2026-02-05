@@ -1,8 +1,9 @@
 package com.Api.Fidelitypay.repository;
 
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.Enum.PaymentStatus;
+import com.Api.Fidelitypay.enums.PaymentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -30,7 +31,17 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByOperatorAndStatus(String operator, PaymentStatus status);
 
     List<Payment> findTop50ByOrderByCreatedAtDesc();
-
+   // Ajoutez ces deux méthodes
+    List<Payment> findByUsedFallbackTrueOrderByCreatedAtDesc();
+    
+        
+    // Ajoutez cette méthode
+    List<Payment> findByUsedFallbackTrueAndFallbackReasonContainingIgnoreCaseOrderByCreatedAtDesc(String reason);
+    
+    // Optionnel: pour les requêtes plus complexes
+    @Query("SELECT p.fallbackReason, COUNT(p) FROM Payment p WHERE p.usedFallback = true AND p.fallbackReason IS NOT NULL GROUP BY p.fallbackReason")
+    List<Object[]> countFallbacksByReason();
+    long countByUsedFallbackTrue();
     // ✅ CORRIGÉ : paramètre operator obligatoire
     Optional<Payment> findFirstByOperatorOrderByCreatedAtDesc(String operator);
 

@@ -1,6 +1,6 @@
 package com.Api.Fidelitypay.integration;
 
-import com.Api.Fidelitypay.Enum.ErrorType;
+import com.Api.Fidelitypay.enums.ErrorType;
 
 /**
  * Lightweight DTO that represents the outcome of a provider payment initiation

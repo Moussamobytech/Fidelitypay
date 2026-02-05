@@ -101,16 +101,16 @@ public class PayDunyaClient {
 
             if (e instanceof java.net.SocketTimeoutException
                     || e.getCause() instanceof java.net.SocketTimeoutException) {
-                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.TIMEOUT);
+                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.TIMEOUT);
             } else if (e instanceof java.net.UnknownHostException
                     || e.getCause() instanceof java.net.UnknownHostException) {
-                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.NETWORK);
+                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.NETWORK);
             } else if (e.getMessage() != null && e.getMessage().contains("401")) {
-                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.AUTHENTICATION);
+                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.AUTHENTICATION);
             } else if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
-                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.PROVIDER_DOWN);
+                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.PROVIDER_DOWN);
             } else {
-                result.setErrorType(com.Api.Fidelitypay.Enum.ErrorType.UNKNOWN);
+                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.UNKNOWN);
             }
 
             return result;

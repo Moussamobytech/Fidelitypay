@@ -1,6 +1,6 @@
 package com.Api.Fidelitypay.service;
 
-import com.Api.Fidelitypay.Enum.PaymentStatus;
+import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
