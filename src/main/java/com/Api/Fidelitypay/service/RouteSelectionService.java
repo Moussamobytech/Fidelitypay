@@ -51,7 +51,7 @@ public class RouteSelectionService {
     /**
      * Récupère les routes disponibles et les trie par score
      */
-    private List<Route> getSortedRoutes(String operator) {
+    public List<Route> getSortedRoutes(String operator) {
         return routeRepository.findByAvailabilityTrueAndOperator(operator)
                 .stream()
                 .sorted(Comparator.comparingDouble(this::calculateScore))

@@ -2,12 +2,18 @@ package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
+import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.repository.RouteRepository;
+import com.Api.Fidelitypay.repository.LogEntryRepository;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -16,24 +22,24 @@ public class MonitoringService {
     private final RouteRepository routeRepository;
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
-    private final com.Api.Fidelitypay.repository.LogEntryRepository logEntryRepository;
+    private final LogEntryRepository logEntryRepository;
 
     public MonitoringService(
             RouteRepository routeRepository,
             KkiapayClient kkiapayClient,
             PayDunyaClient payDunyaClient,
-            com.Api.Fidelitypay.repository.LogEntryRepository logEntryRepository) {
+            LogEntryRepository logEntryRepository) {
         this.routeRepository = routeRepository;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
         this.logEntryRepository = logEntryRepository;
     }
 
-    public java.util.List<com.Api.Fidelitypay.model.LogEntry> getAllLogs() {
+    public List<LogEntry> getAllLogs() {
         return logEntryRepository.findAll();
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRateString = "${monitoring.interval:300000}")
+    @Scheduled(fixedRateString = "${monitoring.interval:300000}")
     public void checkRoutes() {
 
         for (Route route : routeRepository.findAll()) {
@@ -96,14 +102,14 @@ public class MonitoringService {
             double latencyMs = (System.nanoTime() - start) / 1_000_000.0;
 
             // Calculate Failure Rate based on logs from the last 1 hour
-            java.time.LocalDateTime oneHourAgo = java.time.LocalDateTime.now().minusHours(1);
-            java.util.List<com.Api.Fidelitypay.model.LogEntry> recentLogs = logEntryRepository
+            LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+            List<LogEntry> recentLogs = logEntryRepository
                     .findByRouteUsedAndCreatedAtAfter(route.getName(), oneHourAgo);
 
             if (!recentLogs.isEmpty()) {
                 long total = recentLogs.size();
                 long failed = recentLogs.stream()
-                        .filter(l -> l.getStatus() == com.Api.Fidelitypay.enums.LogStatus.FAILED).count();
+                        .filter(l -> l.getStatus() == LogStatus.FAILED).count();
                 double failureRate = (double) failed / total;
                 route.setFailureRate(failureRate);
             } else {
@@ -121,7 +127,7 @@ public class MonitoringService {
         }
     }
 
-    public java.util.List<Route> getAllRoutes() {
+    public List<Route> getAllRoutes() {
         return routeRepository.findAll();
     }
 }

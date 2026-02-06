@@ -1,12 +1,17 @@
 package com.Api.Fidelitypay.integration;
 
+import com.Api.Fidelitypay.config.PaydunyaProperties;
+import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.integration.paydunya.dto.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpStatusCodeException;
+
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 
 @Component
 @Slf4j
@@ -14,9 +19,9 @@ public class PayDunyaClient {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final com.Api.Fidelitypay.config.PaydunyaProperties paydunyaProperties;
+    private final PaydunyaProperties paydunyaProperties;
 
-    public PayDunyaClient(RestTemplate restTemplate, com.Api.Fidelitypay.config.PaydunyaProperties paydunyaProperties) {
+    public PayDunyaClient(RestTemplate restTemplate, PaydunyaProperties paydunyaProperties) {
         this.restTemplate = restTemplate;
         this.paydunyaProperties = paydunyaProperties;
     }
@@ -31,9 +36,12 @@ public class PayDunyaClient {
             // Simple ping to base URL to check connectivity
             restTemplate.getForEntity(baseUrl, String.class);
             return true;
-        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+        } catch (HttpStatusCodeException e) {
             // 4xx or 5xx means server responded
             return true;
+        } catch (Exception e) {
+            log.error("PayDunya availability check failed", e);
+            return false;
         }
     }
 
@@ -99,18 +107,18 @@ public class PayDunyaClient {
             result.setResponseTimeMs(elapsedMs);
             result.setRawResponse(e.getMessage());
 
-            if (e instanceof java.net.SocketTimeoutException
-                    || e.getCause() instanceof java.net.SocketTimeoutException) {
-                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.TIMEOUT);
-            } else if (e instanceof java.net.UnknownHostException
-                    || e.getCause() instanceof java.net.UnknownHostException) {
-                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.NETWORK);
+            if (e instanceof SocketTimeoutException
+                    || e.getCause() instanceof SocketTimeoutException) {
+                result.setErrorType(ErrorType.TIMEOUT);
+            } else if (e instanceof UnknownHostException
+                    || e.getCause() instanceof UnknownHostException) {
+                result.setErrorType(ErrorType.NETWORK);
             } else if (e.getMessage() != null && e.getMessage().contains("401")) {
-                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.AUTHENTICATION);
+                result.setErrorType(ErrorType.AUTHENTICATION);
             } else if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
-                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.PROVIDER_DOWN);
+                result.setErrorType(ErrorType.PROVIDER_DOWN);
             } else {
-                result.setErrorType(com.Api.Fidelitypay.enums.ErrorType.UNKNOWN);
+                result.setErrorType(ErrorType.UNKNOWN);
             }
 
             return result;

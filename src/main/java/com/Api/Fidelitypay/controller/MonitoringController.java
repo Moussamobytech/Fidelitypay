@@ -1,5 +1,6 @@
 package com.Api.Fidelitypay.controller;
 
+import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.service.MonitoringService;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class MonitoringController {
     }
 
     @GetMapping("/logs")
-    public ResponseEntity<List<com.Api.Fidelitypay.model.LogEntry>> getLogs() {
+    public ResponseEntity<List<LogEntry>> getLogs() {
         return ResponseEntity.ok(monitoringService.getAllLogs());
     }
 }

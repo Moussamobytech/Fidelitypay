@@ -107,29 +107,29 @@ class PaymentServiceTest {
 
         @Test
         void initiatePayment_fallbackSuccess_usesSecondaryRoute() {
-                // 1. Setup primary route
+                // 1. Setup routes
                 Route primary = new Route();
                 primary.setName("PAYDUNYA_WAVE");
                 primary.setProvider("PAYDUNYA");
                 primary.setCost(0.1);
 
-                // 2. Setup fallback route
                 Route fallback = new Route();
                 fallback.setName("KKIAPAY_WAVE");
                 fallback.setProvider("KKIAPAY");
                 fallback.setCost(0.2);
 
-                when(routeSelectionService.selectBestRoute(anyString())).thenReturn(primary);
-                when(routeSelectionService.selectFallbackRoute(anyString())).thenReturn(fallback);
+                when(routeSelectionService.getSortedRoutes(anyString()))
+                                .thenReturn(java.util.List.of(primary, fallback));
 
-                // 3. Mock primary failure (Technical error)
+                // 2. Mock primary failure (Technical error)
                 PaymentResult primaryResult = new PaymentResult(false);
                 primaryResult.setRawResponse("TIMEOUT: Connection failed");
                 primaryResult.setResponseTimeMs(3000.0);
+                primaryResult.setErrorType(com.Api.Fidelitypay.enums.ErrorType.TIMEOUT);
                 when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
                                 anyString(), anyString())).thenReturn(primaryResult);
 
-                // 4. Mock fallback success
+                // 3. Mock fallback success
                 PaymentResult fallbackResult = new PaymentResult(true);
                 fallbackResult.setProviderId("kkiapay-success-123");
                 fallbackResult.setRawResponse("{\"status\":\"success\"}");
@@ -148,11 +148,11 @@ class PaymentServiceTest {
                 assertEquals(PaymentStatus.SUCCESS, res.getStatus());
                 assertEquals("KKIAPAY_WAVE", res.getRouteName());
                 assertEquals("KKIAPAY", res.getProvider());
+                assertTrue(res.isUsedFallback());
 
                 verify(payDunyaClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
                                 anyString(), anyString());
                 verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
                                 anyString(), anyString());
-                verify(routeSelectionService).selectFallbackRoute(anyString());
         }
 }
