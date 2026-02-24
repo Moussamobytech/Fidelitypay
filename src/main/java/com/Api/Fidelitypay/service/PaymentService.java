@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.HashMap;
 import java.util.Map;
@@ -187,9 +186,8 @@ public class PaymentService {
         saveLog(paymentId, finalRouteUsed, finalResult, success, payment.getFailureReason(),
                 payment.getErrorType(), payment.isUsedFallback(), payment.getFallbackReason(), primaryProvider);
 
-        if (success) {
-            webhookService.sendWebhook(payment);
-        }
+        // Envoyer la notification via Webhook (indépendamment du succès/échec)
+        webhookService.sendWebhook(payment);
 
         return payment;
     }
@@ -270,6 +268,9 @@ public class PaymentService {
                     return "BAD_REQUEST";
                 case INTERNAL_ERROR:
                     return "INTERNAL_ERROR";
+                case UNKNOWN:
+                default:
+                    return "GENERIC_FAILURE";
             }
         }
 
@@ -342,7 +343,8 @@ public class PaymentService {
             payment.setStatus(callback.isPaymentSucces() ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
-            if (wasPending && payment.getStatus() == PaymentStatus.SUCCESS) {
+            if (wasPending
+                    && (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED)) {
                 webhookService.sendWebhook(payment);
             }
         });

@@ -1,8 +1,6 @@
 package com.Api.Fidelitypay.integration;
 
 import com.Api.Fidelitypay.config.PaydunyaProperties;
-import com.Api.Fidelitypay.integration.PayDunyaClient;
-import com.Api.Fidelitypay.integration.PaymentResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpEntity;
@@ -16,7 +14,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@SuppressWarnings("null")
 class PayDunyaClientTest {
 
         private RestTemplate restTemplate;

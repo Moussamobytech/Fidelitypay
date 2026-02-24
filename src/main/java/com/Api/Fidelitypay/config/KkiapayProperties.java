@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @Data
 public class KkiapayProperties {
     private Api api = new Api();
-    private String storeName;
+    private Store store = new Store();
     private String callbackUrl;
 
     @Data
@@ -18,5 +18,10 @@ public class KkiapayProperties {
         private String publicKey;
         private String privateKey;
         private String secretKey;
+    }
+
+    @Data
+    public static class Store {
+        private String name;
     }
 }

@@ -95,7 +95,10 @@ public class KkiapayClient {
             result.setResponseTimeMs(elapsedMs);
 
             // 🧠 Parse JSON
-            KkiapayResponseDTO kkiapayResponse = objectMapper.readValue(response.getBody(), KkiapayResponseDTO.class);
+            String body = response.getBody();
+            KkiapayResponseDTO kkiapayResponse = (body != null)
+                    ? objectMapper.readValue(body, KkiapayResponseDTO.class)
+                    : null;
 
             boolean success = response.getStatusCode().is2xxSuccessful()
                     && kkiapayResponse != null
@@ -103,7 +106,7 @@ public class KkiapayClient {
 
             result.setSuccess(success);
 
-            if (success) {
+            if (success && kkiapayResponse != null) {
                 result.setProviderId(kkiapayResponse.getTransactionId());
                 result.setPaymentUrl(isWave ? kkiapayResponse.getWave_launch_url() : kkiapayResponse.getUrl());
 
@@ -112,7 +115,7 @@ public class KkiapayClient {
             } else {
                 String status = (kkiapayResponse != null) ? kkiapayResponse.getStatus() : "UNKNOWN";
                 log.warn("Kkiapay FAILED | status={} | body={}", status, response.getBody());
-                
+
                 // Set error type based on HTTP status
                 if (response.getStatusCode().value() == 401) {
                     result.setErrorType(ErrorType.AUTHENTICATION);
@@ -149,7 +152,8 @@ public class KkiapayClient {
             return ErrorType.NETWORK;
         } else if (e instanceof HttpClientErrorException.Unauthorized) {
             return ErrorType.AUTHENTICATION;
-        } else if (e.getMessage() != null && (e.getMessage().toLowerCase().contains("401") || e.getMessage().toLowerCase().contains("unauthorized"))) {
+        } else if (e.getMessage() != null && (e.getMessage().toLowerCase().contains("401")
+                || e.getMessage().toLowerCase().contains("unauthorized"))) {
             return ErrorType.AUTHENTICATION;
         } else if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
             return ErrorType.PROVIDER_DOWN;
