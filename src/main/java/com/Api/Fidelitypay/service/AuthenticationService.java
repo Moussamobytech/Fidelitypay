@@ -47,14 +47,16 @@ public class AuthenticationService {
             throw new IllegalArgumentException("Cet email est déjà utilisé");
         }
 
-        // Rôle par défaut: CLIENT (et non DEVELOPER)
-        User.Role role = User.Role.CLIENT;
+        // Rôle par défaut: AUTRE (valeur générique quand aucun rôle précis n'est
+        // fourni)
+        User.Role role = User.Role.AUTRE;
         if (request.getRole() != null && !request.getRole().isBlank()) {
             try {
                 role = User.Role.valueOf(request.getRole().toUpperCase());
             } catch (IllegalArgumentException e) {
                 log.error("❌ Rôle invalide demandé: {}", request.getRole());
-                throw new IllegalArgumentException("Rôle invalide. Les rôles acceptés sont: CLIENT, DEVELOPER, ADMIN");
+                throw new IllegalArgumentException(
+                        "Rôle invalide. Les rôles acceptés sont: ENTREPRENEUR_CEO, PRODUCT_MANAGER, AUTRE, DEVELOPER, ADMIN");
             }
         }
 
@@ -66,7 +68,8 @@ public class AuthenticationService {
             }
             if (adminSecretHeader == null || !adminSecretHeader.equals(adminCreationSecret)) {
                 log.error("❌ Tentative de création d'ADMIN avec un secret invalide pour: {}", request.getEmail());
-                throw new IllegalArgumentException("Secret d'administration invalide pour la création d'un compte ADMIN");
+                throw new IllegalArgumentException(
+                        "Secret d'administration invalide pour la création d'un compte ADMIN");
             }
         }
 
@@ -75,6 +78,10 @@ public class AuthenticationService {
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(role)
+                .applicationName(request.getApplicationName())
+                .countries(request.getCountries())
+                .callbackUrl(request.getCallbackUrl() != null ? request.getCallbackUrl() : "")
+                .redirectUrl(request.getRedirectUrl() != null ? request.getRedirectUrl() : "")
                 .isActive(true)
                 .build();
 

@@ -73,3 +73,23 @@ Récupère l'historique complet de tous les paiements enregistrés.
 *   `PENDING` : Paiement initié, en attente de réponse ou de validation.
 *   `SUCCESS` : Paiement réussi.
 *   `FAILED` : Paiement échoué ou refusé.
+
+## Informations fournies par FidelityPay après inscription
+* API KEY Sandbox (pour les tests)
+
+ * API KEY Production (pour l'environnement réel)
+
+* Base URL Sandbox : https://sandbox-api.fidelitypay.com/v1
+
+* Base URL Production : https://api.fidelitypay.com/v1
+
+
+Vous etes
+Developpeur
+Entrepreneur/CEO
+Product Manager
+Autre
+
+Pays souhaites pour les paiments
+Tout
+liste pays

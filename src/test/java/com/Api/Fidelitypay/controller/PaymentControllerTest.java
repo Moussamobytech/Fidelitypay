@@ -12,10 +12,11 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
+import com.Api.Fidelitypay.model.User;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -58,14 +59,15 @@ class PaymentControllerTest {
     }
 
     @Test
+    @WithMockUser
     void initiatePayment_valid_returns200() throws Exception {
         PaymentInitiateRequest req = new PaymentInitiateRequest();
         req.setAmount(100.0);
         req.setCountry("SN");
         req.setOperator("WAVE");
 
-        when(paymentService.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                anyString(), anyString()))
+        when(paymentService.initiatePayment(any(User.class), anyDouble(), anyString(), anyString(), anyString(),
+                anyString(), anyString(), anyString()))
                 .thenReturn(new Payment());
 
         mockMvc.perform(post("/api/payments/initiate")

@@ -34,6 +34,22 @@ public class User implements UserDetails {
     @Enumerated(EnumType.STRING)
     private Role role;
 
+    // Application-related fields (for developers / app registration)
+    private String applicationName;
+
+    @ElementCollection
+    @CollectionTable(name = "user_countries", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "country")
+    private List<String> countries;
+
+    @Builder.Default
+    @Column(nullable = true)
+    private String callbackUrl = "";
+
+    @Builder.Default
+    @Column(nullable = true)
+    private String redirectUrl = "";
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -77,7 +93,9 @@ public class User implements UserDetails {
     }
 
     public enum Role {
-        CLIENT,
+        ENTREPRENEUR_CEO,
+        PRODUCT_MANAGER,
+        AUTRE,
         DEVELOPER,
         ADMIN
     }

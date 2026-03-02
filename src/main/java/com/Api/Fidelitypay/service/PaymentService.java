@@ -9,6 +9,7 @@ import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.model.Route;
+import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +60,8 @@ public class PaymentService {
     /**
      * Initie un paiement avec fallback réel entre plusieurs providers
      */
-    public Payment initiatePayment(double amount, String country, String operatorInput, String phone, String firstname,
+    public Payment initiatePayment(User user, double amount, String country, String operatorInput, String phone,
+            String firstname,
             String lastname, String email) {
 
         String operator = (operatorInput != null) ? operatorInput.toUpperCase().trim() : "UNKNOWN";
@@ -69,6 +71,7 @@ public class PaymentService {
         // 1. Initialiser l'objet Payment
         Payment payment = new Payment();
         payment.setPaymentId(paymentId);
+        payment.setUser(user);
         payment.setOperator(operator);
         payment.setAmount(BigDecimal.valueOf(amount));
         payment.setCurrency("XOF");
@@ -321,8 +324,23 @@ public class PaymentService {
         return paymentRepository.findByPaymentId(paymentId).orElse(null);
     }
 
-    public List<Payment> getAllPayments() {
-        return paymentRepository.findAllByOrderByCreatedAtDesc();
+    public List<Payment> getAllPayments(User user) {
+        if (user == null)
+            return List.of();
+
+        if (user.getRole() == User.Role.ADMIN) {
+            return paymentRepository.findAllByOrderByCreatedAtDesc();
+        }
+        return paymentRepository.findByUserId(user.getId());
+    }
+
+    /**
+     * ✅ Récupère les paiements pour un utilisateur spécifique (pour ADMIN)
+     */
+    public List<Payment> getPaymentsByUserId(String userId) {
+        if (userId == null || userId.isEmpty())
+            return List.of();
+        return paymentRepository.findByUserId(userId);
     }
 
     public List<String> getAllPaymentCountries() {

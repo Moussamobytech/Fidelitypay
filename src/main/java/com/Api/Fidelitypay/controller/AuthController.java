@@ -34,7 +34,7 @@ public class AuthController {
             HttpServletRequest httpRequest) {
 
         log.info("📝 Tentative d'inscription pour: {}", request.getEmail());
-        
+
         String adminSecretHeader = httpRequest.getHeader("X-ADMIN-SECRET");
 
         try {
@@ -42,6 +42,9 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("❌ Erreur inattendue lors de l'inscription de {}: {}", request.getEmail(), e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("message", "Erreur serveur: " + e.getMessage()));
         }
     }
 

@@ -2,6 +2,7 @@ package com.Api.Fidelitypay.model;
 
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -17,13 +18,18 @@ import java.time.LocalDateTime;
         @Index(name = "idx_payment_payment_id", columnList = "paymentId"),
         @Index(name = "idx_payment_status", columnList = "status"),
         @Index(name = "idx_payment_operator", columnList = "operator"),
-        @Index(name = "idx_payment_fallback", columnList = "usedFallback")  // Nouvel index
+        @Index(name = "idx_payment_fallback", columnList = "usedFallback") // Nouvel index
 })
 public class Payment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    @JsonIgnore
+    private User user;
 
     @Column(nullable = false, unique = true, length = 50)
     private String paymentId;
@@ -75,7 +81,7 @@ public class Payment {
     private String providerResponse;
 
     private String paymentUrl;
-    
+
     @Column(nullable = false)
     private boolean usedFallback = false;
 
@@ -98,4 +104,10 @@ public class Payment {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    // 🔥 Exposer l'ID de l'utilisateur pour le frontend
+    @JsonProperty("userId")
+    public String getUserId() {
+        return user != null ? user.getId() : null;
+    }
 }

@@ -10,6 +10,9 @@ import com.Api.Fidelitypay.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.Api.Fidelitypay.model.User;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,7 +43,12 @@ public class PaymentController {
     public ResponseEntity<PaymentResponseDTO> initiatePayment(
             @Valid @RequestBody PaymentInitiateRequest request) {
 
+        // Récupérer l'utilisateur authentifié
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) authentication.getPrincipal();
+
         Payment payment = paymentService.initiatePayment(
+                user,
                 request.getAmount(),
                 request.getCountry(),
                 request.getOperator(),
@@ -81,7 +89,19 @@ public class PaymentController {
     public ResponseEntity<Payment> getPaymentStatus(
             @PathVariable String paymentId) {
 
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) authentication.getPrincipal();
+
         Payment payment = paymentService.getPaymentStatus(paymentId);
+
+        if (payment != null && user.getRole() != User.Role.ADMIN) {
+            // Si ce n'est pas un admin, on vérifie que le paiement appartient à
+            // l'utilisateur
+            if (payment.getUser() == null || !payment.getUser().getId().equals(user.getId())) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
+            }
+        }
+
         return ResponseEntity.ok(payment);
     }
 
@@ -89,8 +109,15 @@ public class PaymentController {
      * Liste de tous les paiements
      */
     @GetMapping("/payments")
-    public ResponseEntity<List<Payment>> getAllPayments() {
-        return ResponseEntity.ok(paymentService.getAllPayments());
+    public ResponseEntity<List<Payment>> getAllPayments(@RequestParam(required = false) String userId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) authentication.getPrincipal();
+
+        if (userId != null && user.getRole() == User.Role.ADMIN) {
+            return ResponseEntity.ok(paymentService.getPaymentsByUserId(userId));
+        }
+
+        return ResponseEntity.ok(paymentService.getAllPayments(user));
     }
 
     /**

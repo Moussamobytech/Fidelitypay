@@ -6,6 +6,7 @@ import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.model.Route;
+import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +59,8 @@ class PaymentServiceTest {
                 Payment saved = new Payment();
                 when(paymentRepository.save(any())).thenReturn(saved);
 
-                Payment res = paymentService.initiatePayment(100.0, "SN", "WAVE", "221770000000", "John", "Doe",
+                User user = new User();
+                Payment res = paymentService.initiatePayment(user, 100.0, "SN", "WAVE", "221770000000", "John", "Doe",
                                 "john@example.com");
 
                 assertNotNull(res);
@@ -89,7 +91,8 @@ class PaymentServiceTest {
                         return p;
                 });
 
-                Payment res = paymentService.initiatePayment(500.0, "SN", "WAVE", "221770000000", "Jane", "Smith",
+                User user = new User();
+                Payment res = paymentService.initiatePayment(user, 500.0, "SN", "WAVE", "221770000000", "Jane", "Smith",
                                 "jane@example.com");
 
                 assertNotNull(res);
@@ -140,7 +143,8 @@ class PaymentServiceTest {
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
                 // Execute
-                Payment res = paymentService.initiatePayment(100.0, "SN", "WAVE", "221770000000", "John", "Doe",
+                User user = new User();
+                Payment res = paymentService.initiatePayment(user, 100.0, "SN", "WAVE", "221770000000", "John", "Doe",
                                 "john@example.com");
 
                 // Verify
