@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 public class ApiKeyService {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final com.Api.Fidelitypay.repository.UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -35,6 +36,29 @@ public class ApiKeyService {
         List<ApiKey> keys = apiKeyRepository.findByUserId(userId);
         return keys.stream()
                 .map(this::toResponseWithoutSecret)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get ALL API keys in the system (Admin only)
+     */
+    public List<ApiKeyResponse> getAllApiKeys() {
+        // Fetch all users once for mapping
+        List<com.Api.Fidelitypay.model.User> allUsers = userRepository.findAll();
+        java.util.Map<String, String> userNames = allUsers.stream()
+                .collect(Collectors.toMap(com.Api.Fidelitypay.model.User::getId,
+                        com.Api.Fidelitypay.model.User::getFullName, (a, b) -> a));
+        java.util.Map<String, String> userEmails = allUsers.stream()
+                .collect(Collectors.toMap(com.Api.Fidelitypay.model.User::getId,
+                        com.Api.Fidelitypay.model.User::getEmail, (a, b) -> a));
+
+        return apiKeyRepository.findAll().stream()
+                .map(key -> {
+                    ApiKeyResponse resp = toResponseWithoutSecret(key);
+                    resp.setUserFullName(userNames.getOrDefault(key.getUserId(), "Utilisateur inconnu"));
+                    resp.setUserEmail(userEmails.getOrDefault(key.getUserId(), "N/A"));
+                    return resp;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -98,15 +122,39 @@ public class ApiKeyService {
         ApiKey apiKey = apiKeyRepository.findById(keyId)
                 .orElseThrow(() -> new IllegalArgumentException("API key not found"));
 
-        // Verify ownership
-        if (!apiKey.getUserId().equals(userId)) {
+        // Verify ownership if userId is provided
+        if (userId != null && !apiKey.getUserId().equals(userId)) {
             throw new IllegalArgumentException("Unauthorized: You don't own this API key");
         }
 
         apiKey.setActive(false);
         apiKeyRepository.save(apiKey);
 
-        log.info("🔒 Revoked API key {} for user {}", keyId, userId);
+        log.info("🔒 Revoked API key {} for user {}", keyId, userId != null ? userId : "ADMIN");
+    }
+
+    /**
+     * Admin toggle API key status
+     */
+    @Transactional
+    public void adminToggleApiKeyStatus(String keyId, boolean active) {
+        ApiKey apiKey = apiKeyRepository.findById(keyId)
+                .orElseThrow(() -> new IllegalArgumentException("API key not found"));
+        apiKey.setActive(active);
+        apiKeyRepository.save(apiKey);
+        log.info("🛡️ Admin set API key {} status to {}", keyId, active);
+    }
+
+    /**
+     * Admin delete API key
+     */
+    @Transactional
+    public void adminDeleteApiKey(String keyId) {
+        if (!apiKeyRepository.existsById(keyId)) {
+            throw new IllegalArgumentException("API key not found");
+        }
+        apiKeyRepository.deleteById(keyId);
+        log.info("🗑️ Admin deleted API key {}", keyId);
     }
 
     /**
@@ -215,6 +263,7 @@ public class ApiKeyService {
                 .lastUsedIp(apiKey.getLastUsedIp())
                 .expiresAt(apiKey.getExpiresAt())
                 .metadata(apiKey.getMetadata())
+                // userFullName is usually set by the calling method if needed for admin
                 .build();
     }
 

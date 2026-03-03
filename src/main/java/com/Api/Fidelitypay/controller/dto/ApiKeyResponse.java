@@ -1,5 +1,7 @@
 package com.Api.Fidelitypay.controller.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,10 +33,16 @@ public class ApiKeyResponse {
     private String secretKeyMasked;
 
     private String environment;
+    @JsonProperty("isActive")
     private boolean isActive;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime lastUsedAt;
     private String lastUsedIp;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime expiresAt;
     private String metadata;
+    private String userFullName;
+    private String userEmail;
 }
