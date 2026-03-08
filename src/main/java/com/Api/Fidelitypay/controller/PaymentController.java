@@ -125,7 +125,13 @@ public class PaymentController {
      */
     @GetMapping("/payments/countries")
     public ResponseEntity<List<String>> getPaymentCountries() {
-        return ResponseEntity.ok(paymentService.getAllPaymentCountries());
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) authentication.getPrincipal();
+
+        if (user.getRole() == User.Role.ADMIN) {
+            return ResponseEntity.ok(paymentService.getAllPaymentCountries());
+        }
+        return ResponseEntity.ok(paymentService.getPaymentCountriesByUser(user));
     }
 
     /**

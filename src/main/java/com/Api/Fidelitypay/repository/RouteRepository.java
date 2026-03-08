@@ -11,9 +11,19 @@ import java.util.Optional;
 public interface RouteRepository extends JpaRepository<Route, Long> {
 
     /**
-     * Routes disponibles (UP) pour un opérateur donné.
+     * Routes disponibles (UP) pour un opérateur et un pays donnés.
+     */
+    List<Route> findByAvailabilityTrueAndOperatorAndCountry(String operator, String country);
+
+    /**
+     * Toutes les routes disponibles (UP) pour un opérateur donné.
      */
     List<Route> findByAvailabilityTrueAndOperator(String operator);
+
+    /**
+     * Routes disponibles (UP) pour un opérateur sans pays spécifié (global).
+     */
+    List<Route> findByAvailabilityTrueAndOperatorAndCountryIsNull(String operator);
 
     /**
      * Routes disponibles (UP) pour un opérateur et un provider donné.

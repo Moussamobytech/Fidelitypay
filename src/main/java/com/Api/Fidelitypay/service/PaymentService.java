@@ -85,8 +85,8 @@ public class PaymentService {
 
         paymentRepository.save(payment);
 
-        // 2. Récupérer toutes les routes disponibles triées par score
-        List<Route> availableRoutes = routeSelectionService.getSortedRoutes(operator);
+        // 2. Récupérer toutes les routes disponibles triées par score pour ce pays
+        List<Route> availableRoutes = routeSelectionService.getSortedRoutes(operator, countryCode);
 
         if (availableRoutes.isEmpty()) {
             log.error("No available route for operator {}", operator);
@@ -345,6 +345,12 @@ public class PaymentService {
 
     public List<String> getAllPaymentCountries() {
         return paymentRepository.findDistinctCountries();
+    }
+
+    public List<String> getPaymentCountriesByUser(User user) {
+        if (user == null)
+            return List.of();
+        return paymentRepository.findDistinctCountriesByUserId(user.getId());
     }
 
     public Map<String, Boolean> checkProvidersHealth() {

@@ -46,7 +46,7 @@ class PaymentServiceTest {
                 route.setProvider("PAYDUNYA");
                 route.setCost(0.1);
 
-                when(routeSelectionService.selectBestRoute(anyString())).thenReturn(route);
+                when(routeSelectionService.selectBestRoute(anyString(), anyString())).thenReturn(route);
 
                 PaymentResult pr = new PaymentResult(true);
                 pr.setProviderId("paydunya-123");
@@ -75,7 +75,7 @@ class PaymentServiceTest {
                 route.setProvider("PAYDUNYA");
                 route.setCost(0.1);
 
-                when(routeSelectionService.selectBestRoute(anyString())).thenReturn(route);
+                when(routeSelectionService.selectBestRoute(anyString(), anyString())).thenReturn(route);
 
                 PaymentResult pr = new PaymentResult(false);
                 pr.setProviderId("paydunya-error");
@@ -121,7 +121,7 @@ class PaymentServiceTest {
                 fallback.setProvider("KKIAPAY");
                 fallback.setCost(0.2);
 
-                when(routeSelectionService.getSortedRoutes(anyString()))
+                when(routeSelectionService.getSortedRoutes(anyString(), anyString()))
                                 .thenReturn(java.util.List.of(primary, fallback));
 
                 // 2. Mock primary failure (Technical error)

@@ -53,4 +53,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     @org.springframework.data.jpa.repository.Query("SELECT DISTINCT p.country FROM Payment p WHERE p.country IS NOT NULL")
     List<String> findDistinctCountries();
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT p.country FROM Payment p WHERE p.user.id = :userId AND p.country IS NOT NULL")
+    List<String> findDistinctCountriesByUserId(@Param("userId") String userId);
 }

@@ -5,6 +5,7 @@
 INSERT IGNORE INTO routes (
   name,
   operator,
+  country,
   provider,
   availability,
   avg_latency,
@@ -13,8 +14,9 @@ INSERT IGNORE INTO routes (
   priority
 ) VALUES
 (
-  'PAYDUNYA_WAVE',
+  'PAYDUNYA_WAVE_SN',
   'WAVE',
+  'SN',
   'PAYDUNYA',
   true,
   0,
@@ -23,8 +25,9 @@ INSERT IGNORE INTO routes (
   1
 ),
 (
-  'KKIAPAY_WAVE',
+  'KKIAPAY_WAVE_CI',
   'WAVE',
+  'CI',
   'KKIAPAY',
   true,
   0,
@@ -40,6 +43,7 @@ INSERT IGNORE INTO routes (
 INSERT IGNORE INTO routes (
   name,
   operator,
+  country,
   provider,
   availability,
   avg_latency,
@@ -48,13 +52,25 @@ INSERT IGNORE INTO routes (
   priority
 ) VALUES
 (
-  'PAYDUNYA_OM',
+  'PAYDUNYA_OM_SN',
   'OM',
+  'SN',
   'PAYDUNYA',
   true,
   0,
   1.2,
   0.01,
+  1
+),
+(
+  'KKIAPAY_OM_BJ',
+  'OM',
+  'BJ',
+  'KKIAPAY',
+  true,
+  0,
+  1.4,
+  0.03,
   1
 );
 
@@ -65,6 +81,7 @@ INSERT IGNORE INTO routes (
 INSERT IGNORE INTO routes (
   name,
   operator,
+  country,
   provider,
   availability,
   avg_latency,
@@ -73,12 +90,24 @@ INSERT IGNORE INTO routes (
   priority
 ) VALUES
 (
-  'KKIAPAY_MOOV',
+  'KKIAPAY_MOOV_BJ',
   'MOOV',
+  'BJ',
   'KKIAPAY',
   true,
   0,
   1.3,
   0.03,
   1
+),
+(
+  'MOOV_ADJAME_CI',
+  'MOOV',
+  'CI',
+  'PAYDUNYA',
+  true,
+  0,
+  1.6,
+  0.04,
+  2
 );

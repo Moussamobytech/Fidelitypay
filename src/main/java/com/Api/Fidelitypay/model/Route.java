@@ -25,6 +25,9 @@ public class Route {
     @Column(nullable = false)
     private String operator;
 
+    @Column(length = 10)
+    private String country;
+
     // SAMIRPAY, PAYDUNYA
     @Column(nullable = false)
     private String provider;
@@ -69,5 +72,14 @@ public class Route {
             return "DEGRADE";
         }
         return "STABLE";
+    }
+
+    @Column(name = "updated_at")
+    private java.time.LocalDateTime updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    public void onUpdate() {
+        this.updatedAt = java.time.LocalDateTime.now();
     }
 }

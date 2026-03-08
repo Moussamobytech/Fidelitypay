@@ -110,4 +110,9 @@ public class Payment {
     public String getUserId() {
         return user != null ? user.getId() : null;
     }
+
+    @JsonProperty("appName")
+    public String getAppName() {
+        return user != null ? user.getApplicationName() : "Inconnu";
+    }
 }
