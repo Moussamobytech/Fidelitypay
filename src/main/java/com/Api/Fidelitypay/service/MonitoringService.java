@@ -130,4 +130,11 @@ public class MonitoringService {
     public List<Route> getAllRoutes() {
         return routeRepository.findAll();
     }
+
+    public Route toggleRoute(Long id, boolean enabled) {
+        Route route = routeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Route non trouvée avec l'ID: " + id));
+        route.setAvailability(enabled);
+        return routeRepository.save(route);
+    }
 }
