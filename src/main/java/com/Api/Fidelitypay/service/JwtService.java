@@ -5,12 +5,16 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.io.DecodingException;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +49,7 @@ public class JwtService {
             extraClaims.put("userId", user.getId());
             extraClaims.put("fullName", user.getFullName());
         }
+
         return generateToken(extraClaims, userDetails);
     }
 
@@ -110,7 +115,38 @@ public class JwtService {
     }
 
     private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        byte[] keyBytes = decodeSecretKey(secretKey);
         return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    private byte[] decodeSecretKey(String secret) {
+        try {
+            byte[] decoded = Decoders.BASE64.decode(secret);
+            if (decoded.length >= 32) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException | DecodingException ignored) {
+            // Try Base64URL or raw text below.
+        }
+
+        try {
+            byte[] decoded = Decoders.BASE64URL.decode(secret);
+            if (decoded.length >= 32) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException | DecodingException ignored) {
+            // Not a Base64URL secret. Fall back to a raw string-derived key.
+        }
+
+        byte[] rawBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (rawBytes.length >= 32) {
+            return rawBytes;
+        }
+
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(rawBytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm unavailable", e);
+        }
     }
 }

@@ -60,7 +60,7 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(401).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            log.error("❌ Erreur inattendue lors de la connexion de {}: {}", request.getEmail(), e.getMessage());
+            log.error("❌ Erreur inattendue lors de la connexion de {}: {}", request.getEmail(), e.toString());
             return ResponseEntity.status(500).body(Map.of("message", "Une erreur interne est survenue"));
         }
     }

@@ -1,0 +1,58 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fidelitypay-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/fidelityapi?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: fidelitypay
+      SPRING_DATASOURCE_PASSWORD: fidelitypay
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET: change-me-in-production-please-use-a-long-secret-key
+      JWT_EXPIRATION: "86400000"
+      ADMIN_CREATION_SECRET: dev-admin-secret-2026
+      PAYDUNYA_API_BASE_URL: https://app.paydunya.com/api/v1
+      PAYDUNYA_API_MASTER_KEY: ""
+      PAYDUNYA_API_PRIVATE_KEY: ""
+      PAYDUNYA_API_TOKEN: ""
+      PAYDUNYA_STORE_NAME: FidelityPay Store
+      KKIAPAY_API_BASE_URL: https://api.kkiapay.me
+      KKIAPAY_API_PUBLIC_KEY: ""
+      KKIAPAY_API_PRIVATE_KEY: ""
+      KKIAPAY_API_SECRET_KEY: ""
+      KKIAPAY_STORE_NAME: FidelityPay Store
+      KKIAPAY_CALLBACK_URL: http://localhost:8060/api/payments/callback/kkiapay
+      WEBHOOK_URL: http://example.com/webhook
+      HTTP_CONNECT_TIMEOUT: "5000"
+      HTTP_READ_TIMEOUT: "10000"
+    ports:
+      - "8060:8060"
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.4
+    container_name: fidelitypay-db
+    environment:
+      MYSQL_DATABASE: fidelityapi
+      MYSQL_USER: fidelitypay
+      MYSQL_PASSWORD: fidelitypay
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

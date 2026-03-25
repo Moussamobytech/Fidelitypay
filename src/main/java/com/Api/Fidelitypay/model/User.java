@@ -16,6 +16,8 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Getter
+@Setter
 public class User implements UserDetails {
 
     @Id
@@ -91,6 +93,11 @@ public class User implements UserDetails {
     public boolean isEnabled() {
         return isActive;
     }
+
+    public String getId() {
+        return id;
+    }
+
 
     public enum Role {
         ENTREPRENEUR_CEO,
