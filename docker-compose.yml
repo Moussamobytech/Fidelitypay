@@ -17,14 +17,14 @@ services:
       JWT_EXPIRATION: "86400000"
       ADMIN_CREATION_SECRET: dev-admin-secret-2026
       PAYDUNYA_API_BASE_URL: https://app.paydunya.com/api/v1
-      PAYDUNYA_API_MASTER_KEY: ""
-      PAYDUNYA_API_PRIVATE_KEY: ""
-      PAYDUNYA_API_TOKEN: ""
+      PAYDUNYA_API_MASTER_KEY: "**************************"
+      PAYDUNYA_API_PRIVATE_KEY: "**************************"
+      PAYDUNYA_API_TOKEN: "**************************"
       PAYDUNYA_STORE_NAME: FidelityPay Store
       KKIAPAY_API_BASE_URL: https://api.kkiapay.me
-      KKIAPAY_API_PUBLIC_KEY: ""
-      KKIAPAY_API_PRIVATE_KEY: ""
-      KKIAPAY_API_SECRET_KEY: ""
+      KKIAPAY_API_PUBLIC_KEY: "f93862db9d083a3f670cc7c03b8a86b4ae37ee45"
+      KKIAPAY_API_PRIVATE_KEY: "pk_9f6c5c776ed7765f29f1d5aaa0dbeeb30f2ba1f7472e538292b35f9d60b75ee5"
+      KKIAPAY_API_SECRET_KEY: "sk_1db7af97df6a8f456bbf9aaae38e09882c29b578f73fc361f9179f0f8ebe54c"
       KKIAPAY_STORE_NAME: FidelityPay Store
       KKIAPAY_CALLBACK_URL: http://localhost:8060/api/payments/callback/kkiapay
       WEBHOOK_URL: http://example.com/webhook
@@ -47,7 +47,7 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot" ]
       interval: 10s
       timeout: 5s
       retries: 10
