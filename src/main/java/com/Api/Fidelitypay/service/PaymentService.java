@@ -278,14 +278,14 @@ public class PaymentService {
         }
 
         String error = errorMessage.toUpperCase();
+        if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401") || error.contains("MASTERKEY"))
+            return "AUTHENTICATION_FAILED";
         if (error.contains("SOLDE") || error.contains("INSUFFICIENT") || error.contains("FUNDS"))
             return "INSUFFICIENT_FUNDS";
         if (error.contains("TIMEOUT") || error.contains("TIME_OUT"))
             return "TIMEOUT";
-        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID"))
+        if (error.contains("INVALID") && (error.contains("PHONE") || error.contains("NUMBER")))
             return "INVALID_PHONE_NUMBER";
-        if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401"))
-            return "AUTHENTICATION_FAILED";
         if (error.contains("CANCEL"))
             return "CANCELLED_BY_USER";
 
@@ -308,7 +308,8 @@ public class PaymentService {
             return false;
         String error = errorMessage.toUpperCase();
         return error.contains("TIMEOUT") || error.contains("CONNECTION") || error.contains("500") ||
-                error.contains("NETWORK") || error.contains("503") || error.contains("UNAVAILABLE");
+                error.contains("NETWORK") || error.contains("503") || error.contains("UNAVAILABLE") ||
+                error.contains("MASTERKEY") || error.contains("AUTH") || error.contains("401");
     }
 
     private void logRouteAttempt(String type, Route route, boolean success, String errorMsg, ErrorType errorType) {

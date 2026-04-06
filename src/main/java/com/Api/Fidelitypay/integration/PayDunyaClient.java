@@ -92,9 +92,21 @@ public class PayDunyaClient {
                 log.info("PayDunya SUCCESS | token={} | timeMs={}",
                         payDunyaResponse.getToken(), elapsedMs);
             } else {
-                log.warn("PayDunya FAILED | code={} | msg={}",
+                log.warn("PayDunya FAILED | code={} | msg={} | text={}",
                         payDunyaResponse.getResponseCode(),
-                        payDunyaResponse.getDescription());
+                        payDunyaResponse.getDescription(),
+                        payDunyaResponse.getResponseText());
+
+                // Set error type for better mapping in PaymentService
+                String code = payDunyaResponse.getResponseCode();
+                String desc = (payDunyaResponse.getDescription() != null) ? payDunyaResponse.getDescription().toUpperCase() : "";
+                String text = (payDunyaResponse.getResponseText() != null) ? payDunyaResponse.getResponseText().toUpperCase() : "";
+
+                if ("1001".equals(code) || "1002".equals(code) || 
+                    desc.contains("MASTERKEY") || desc.contains("AUTH") || 
+                    text.contains("MASTERKEY") || text.contains("AUTH")) {
+                    result.setErrorType(ErrorType.AUTHENTICATION);
+                }
             }
 
             return result;
