@@ -17,6 +17,18 @@ public class PaydunyaProperties {
         private String masterKey;
         private String privateKey;
         private String token;
+
+        public void setMasterKey(String masterKey) {
+            this.masterKey = (masterKey != null) ? masterKey.trim() : null;
+        }
+
+        public void setPrivateKey(String privateKey) {
+            this.privateKey = (privateKey != null) ? privateKey.trim() : null;
+        }
+
+        public void setToken(String token) {
+            this.token = (token != null) ? token.trim() : null;
+        }
     }
 
     @Data

@@ -140,8 +140,21 @@ public class PaymentController {
     @PostMapping("/payments/callback/kkiapay")
     public ResponseEntity<Void> kkiapayCallback(
             @RequestBody com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback) {
-
+        // En production, il conviendrait de vérifier la signature avec le SecretKey ici
         paymentService.processKkiapayCallback(callback);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Callback pour PayDunya (IPN)
+     */
+    @PostMapping("/payments/callback/paydunya")
+    public ResponseEntity<Void> paydunyaCallback(
+            @RequestParam("token") String token,
+            @RequestParam("data[status]") String status) {
+
+        boolean success = "completed".equalsIgnoreCase(status);
+        paymentService.processPayDunyaCallback(token, success);
         return ResponseEntity.ok().build();
     }
 }

@@ -42,8 +42,11 @@ public class AuthenticationService {
      * Par défaut, le rôle attribué est CLIENT.
      */
     public AuthResponse register(RegisterRequest request, String adminSecretHeader) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("⚠️ Tentative d'inscription avec un email déjà existant: {}", request.getEmail());
+        String email = request.getEmail().trim().toLowerCase();
+        String password = request.getPassword().trim();
+
+        if (userRepository.existsByEmail(email)) {
+            log.warn("⚠️ Tentative d'inscription avec un email déjà existant: {}", email);
             throw new IllegalArgumentException("Cet email est déjà utilisé");
         }
 
@@ -75,8 +78,8 @@ public class AuthenticationService {
 
         User user = User.builder()
                 .fullName(request.getFullName())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
+                .email(email)
+                .password(passwordEncoder.encode(password))
                 .role(role)
                 .applicationName(request.getApplicationName())
                 .countries(request.getCountries())
@@ -103,19 +106,22 @@ public class AuthenticationService {
      * Connexion d'un utilisateur existant.
      */
     public AuthResponse login(LoginRequest request) {
+        String email = request.getEmail().trim().toLowerCase();
+        String password = request.getPassword().trim();
+
         try {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            request.getEmail(),
-                            request.getPassword()));
+                            email,
+                            password));
         } catch (Exception e) {
-            log.warn("❌ Échec d'authentification pour: {}", request.getEmail());
+            log.warn("❌ Échec d'authentification pour: {}. Erreur: {}", email, e.getMessage());
             throw new IllegalArgumentException("Email ou mot de passe incorrect");
         }
 
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> {
-                    log.error("❌ Utilisateur authentifié mais non trouvé en base: {}", request.getEmail());
+                    log.error("❌ Utilisateur authentifié mais non trouvé en base: {}", email);
                     return new IllegalArgumentException("Utilisateur non trouvé après authentification");
                 });
 

@@ -298,7 +298,8 @@ public class PaymentService {
                     errorType == ErrorType.TIMEOUT ||
                     errorType == ErrorType.NETWORK ||
                     errorType == ErrorType.PROVIDER_DOWN ||
-                    errorType == ErrorType.INTERNAL_ERROR;
+                    errorType == ErrorType.INTERNAL_ERROR ||
+                    errorType == ErrorType.BAD_REQUEST; // For 404/400 errors that might be transient or route-specific
         }
         return isTechnicalError(errorMessage);
     }
@@ -308,7 +309,8 @@ public class PaymentService {
             return false;
         String error = errorMessage.toUpperCase();
         return error.contains("TIMEOUT") || error.contains("CONNECTION") || error.contains("500") ||
-                error.contains("NETWORK") || error.contains("503") || error.contains("UNAVAILABLE");
+                error.contains("NETWORK") || error.contains("503") || error.contains("UNAVAILABLE") ||
+                error.contains("404") || error.contains("401") || error.contains("403");
     }
 
     private void logRouteAttempt(String type, Route route, boolean success, String errorMsg, ErrorType errorType) {
@@ -362,13 +364,22 @@ public class PaymentService {
 
     public void processKkiapayCallback(com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback) {
         log.info("Processing Kkiapay callback for transaction: {}", callback.getTransactionId());
-        paymentRepository.findByProviderPaymentId(callback.getTransactionId()).ifPresent(payment -> {
+        updatePaymentStatusFromProvider(callback.getTransactionId(), callback.isPaymentSucces());
+    }
+
+    public void processPayDunyaCallback(String token, boolean success) {
+        log.info("Processing PayDunya callback for token: {}", token);
+        updatePaymentStatusFromProvider(token, success);
+    }
+
+    private void updatePaymentStatusFromProvider(String providerId, boolean success) {
+        paymentRepository.findByProviderPaymentId(providerId).ifPresent(payment -> {
             boolean wasPending = payment.getStatus() == PaymentStatus.PENDING;
-            payment.setStatus(callback.isPaymentSucces() ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
+            payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
-            if (wasPending
-                    && (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED)) {
+
+            if (wasPending && (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED)) {
                 webhookService.sendWebhook(payment);
             }
         });

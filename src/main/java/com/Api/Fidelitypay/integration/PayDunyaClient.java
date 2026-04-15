@@ -50,6 +50,13 @@ public class PayDunyaClient {
         long start = System.nanoTime();
 
         try {
+            // 🧐 Debug Log (Masked)
+            log.info("PayDunya Attempt | URL: {} | MasterKey: {}... | PrivateKey: {}... | Token: {}...",
+                    paydunyaProperties.getApi().getBaseUrl(),
+                    mask(paydunyaProperties.getApi().getMasterKey()),
+                    mask(paydunyaProperties.getApi().getPrivateKey()),
+                    mask(paydunyaProperties.getApi().getToken()));
+
             // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -95,6 +102,16 @@ public class PayDunyaClient {
                 log.warn("PayDunya FAILED | code={} | msg={}",
                         payDunyaResponse.getResponseCode(),
                         payDunyaResponse.getDescription());
+                
+                // Map logical error codes to ErrorTypes for fallback
+                String code = payDunyaResponse.getResponseCode();
+                if ("1001".equals(code) || "1002".equals(code)) {
+                    result.setErrorType(ErrorType.AUTHENTICATION);
+                } else if ("400".equals(code)) {
+                    result.setErrorType(ErrorType.BAD_REQUEST);
+                } else {
+                    result.setErrorType(ErrorType.UNKNOWN);
+                }
             }
 
             return result;
@@ -123,5 +140,11 @@ public class PayDunyaClient {
 
             return result;
         }
+    }
+    
+    private String mask(String key) {
+        if (key == null || key.length() < 8) return "****";
+        if (key.contains("*")) return key; // Already a placeholder or asterisk
+        return key.substring(0, 4) + "...." + key.substring(key.length() - 4);
     }
 }

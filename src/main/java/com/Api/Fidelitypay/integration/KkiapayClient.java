@@ -57,10 +57,12 @@ public class KkiapayClient {
             // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+            // Use Secret Key for backend-to-backend calls
+            headers.set("x-api-key", kkiapayProperties.getApi().getSecretKey());
 
             boolean isWave = "WAVE".equalsIgnoreCase(operator);
-            String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
+            // 'partner' is often for legacy accounts, 'external' or 'request' is standard now
+            String endpoint = isWave ? "/api/v1/payments/external/wave" : "/api/v1/payments/request";
 
             // 📦 Payload
             KkiapayRequestDTO.KkiapayRequestDTOBuilder payloadBuilder = KkiapayRequestDTO.builder()
