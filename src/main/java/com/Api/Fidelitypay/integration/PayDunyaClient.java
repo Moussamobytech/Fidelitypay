@@ -105,7 +105,7 @@ public class PayDunyaClient {
                 
                 // Map logical error codes to ErrorTypes for fallback
                 String code = payDunyaResponse.getResponseCode();
-                if ("1001".equals(code) || "1002".equals(code)) {
+                if ("1001".equals(code) || "1002".equals(code) || "4001".equals(code)) {
                     result.setErrorType(ErrorType.AUTHENTICATION);
                 } else if ("400".equals(code)) {
                     result.setErrorType(ErrorType.BAD_REQUEST);

@@ -278,13 +278,13 @@ public class PaymentService {
         }
 
         String error = errorMessage.toUpperCase();
-        if (error.contains("SOLDE") || error.contains("INSUFFICIENT") || error.contains("FUNDS"))
+        if (error.contains("SOLDE") || error.contains("INSUFFICIENT") || error.contains("FUNDS") || error.contains("4002"))
             return "INSUFFICIENT_FUNDS";
         if (error.contains("TIMEOUT") || error.contains("TIME_OUT"))
             return "TIMEOUT";
-        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID"))
+        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID") || error.contains("FORMAT"))
             return "INVALID_PHONE_NUMBER";
-        if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401"))
+        if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401") || error.contains("4001"))
             return "AUTHENTICATION_FAILED";
         if (error.contains("CANCEL"))
             return "CANCELLED_BY_USER";
@@ -293,24 +293,25 @@ public class PaymentService {
     }
 
     private boolean shouldTriggerFallback(String errorMessage, ErrorType errorType) {
-        if (errorType != null) {
-            return errorType == ErrorType.AUTHENTICATION ||
-                    errorType == ErrorType.TIMEOUT ||
-                    errorType == ErrorType.NETWORK ||
-                    errorType == ErrorType.PROVIDER_DOWN ||
-                    errorType == ErrorType.INTERNAL_ERROR ||
-                    errorType == ErrorType.BAD_REQUEST; // For 404/400 errors that might be transient or route-specific
+        String reason = determineFailureReason(errorMessage, errorType);
+        
+        // On ne fait PAS de fallback pour les erreurs fonctionnelles (liées à l'utilisateur)
+        if ("INSUFFICIENT_FUNDS".equals(reason) || 
+            "CANCELLED_BY_USER".equals(reason) || 
+            "INVALID_PHONE_NUMBER".equals(reason)) {
+            return false;
         }
-        return isTechnicalError(errorMessage);
+
+        // Pour TOUTE autre erreur (Technique, Auth, 404, 500, etc.), on tente le fallback
+        return true;
     }
 
     private boolean isTechnicalError(String errorMessage) {
-        if (errorMessage == null)
-            return false;
-        String error = errorMessage.toUpperCase();
-        return error.contains("TIMEOUT") || error.contains("CONNECTION") || error.contains("500") ||
-                error.contains("NETWORK") || error.contains("503") || error.contains("UNAVAILABLE") ||
-                error.contains("404") || error.contains("401") || error.contains("403");
+        if (errorMessage == null) return true;
+        String reason = determineFailureReason(errorMessage, null);
+        return !"INSUFFICIENT_FUNDS".equals(reason) && 
+               !"CANCELLED_BY_USER".equals(reason) && 
+               !"INVALID_PHONE_NUMBER".equals(reason);
     }
 
     private void logRouteAttempt(String type, Route route, boolean success, String errorMsg, ErrorType errorType) {
