@@ -54,13 +54,13 @@ public class KkiapayClient {
         long start = System.nanoTime();
 
         try {
-            boolean isWave = "WAVE".equalsIgnoreCase(operator);
-
             // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            // Kkiapay requires Public Key for redirect requests and Secret Key for direct/partner integrations
-            headers.set("x-api-key", isWave ? kkiapayProperties.getApi().getSecretKey() : kkiapayProperties.getApi().getPublicKey());
+            // Use Public Key as required by Kkiapay API documentation
+            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+
+            boolean isWave = "WAVE".equalsIgnoreCase(operator);
             // 'partner' is often for legacy accounts, 'external' or 'request' is standard now
             String endpoint = isWave ? "/api/v1/payments/external/wave" : "/api/v1/payments/request";
 
