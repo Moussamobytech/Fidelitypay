@@ -15,7 +15,7 @@ set KKIAPAY_API_BASE_URL=https://api.kkiapay.me
 set KKIAPAY_API_PUBLIC_KEY=f93862db9d083a3f670cc7c03b8a86b4ae37ee45
 set KKIAPAY_API_PRIVATE_KEY=pk_9f6c5c776ed7765f29f1d5aaa0dbeeb30f2ba1f7472e538292b35f9d60b75ee5
 set KKIAPAY_API_SECRET_KEY=sk_1db7af97df6a8f456bbf9aaae38e09882c29b578f73fc361f9179f0f8ebe54c
-set KKIAPAY_CALLBACK_URL=http://localhost:8080/api/payments/callback/kkiapay
+set KKIAPAY_CALLBACK_URL=http://localhost:8060/api/payments/callback/kkiapay
 
 echo Variables d'environnement configurees:
 echo PAYDUNYA_API_MASTER_KEY=%PAYDUNYA_API_MASTER_KEY%

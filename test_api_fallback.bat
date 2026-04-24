@@ -13,7 +13,7 @@ echo Test du fallback automatique...
 echo.
 
 REM Test avec un paiement Wave (devrait échouer sur PayDunya et réussir sur Kkiapay)
-curl -X POST http://localhost:8080/api/payments/initiate ^
+curl -X POST http://localhost:8060/api/payments/initiate ^
   -H "Content-Type: application/json" ^
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiaWF0IjoxNzEyNzQ4MDAwLCJleHAiOjE3MTI3NTE2MDB9.test" ^
   -d "{ ^
