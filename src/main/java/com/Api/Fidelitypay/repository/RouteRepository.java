@@ -7,8 +7,16 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
 @Repository
 public interface RouteRepository extends JpaRepository<Route, Long> {
+
+    /**
+     * Toutes les routes disponibles (UP).
+     */
+    List<Route> findByAvailabilityTrue();
 
     /**
      * Routes disponibles (UP) pour un opérateur et un pays donnés.
@@ -54,4 +62,10 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
      * Recherche d’une route par son nom exact.
      */
     Optional<Route> findByName(String name);
+
+    /**
+     * Récupère les opérateurs distincts disponibles pour un pays spécifique (ou globaux).
+     */
+    @Query("SELECT DISTINCT r.operator FROM Route r WHERE r.availability = true AND (LOWER(r.country) = LOWER(:country) OR r.country IS NULL OR r.country = '') AND r.operator IS NOT NULL")
+    List<String> findDistinctOperatorsByCountry(@Param("country") String country);
 }

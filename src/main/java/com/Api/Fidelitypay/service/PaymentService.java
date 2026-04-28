@@ -8,7 +8,6 @@ import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
@@ -30,35 +29,36 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final LogEntryRepository logEntryRepository;
-    private final RouteSelectionService routeSelectionService;
     private final WebhookService webhookService;
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
+    private final RouteSelectionService routeSelectionService;
 
     public PaymentService(
             PaymentRepository paymentRepository,
             LogEntryRepository logEntryRepository,
-            RouteSelectionService routeSelectionService,
             WebhookService webhookService,
             KkiapayClient kkiapayClient,
-            PayDunyaClient payDunyaClient) {
+            PayDunyaClient payDunyaClient,
+            RouteSelectionService routeSelectionService) {
         this.paymentRepository = paymentRepository;
         this.logEntryRepository = logEntryRepository;
-        this.routeSelectionService = routeSelectionService;
         this.webhookService = webhookService;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
+        this.routeSelectionService = routeSelectionService;
     }
 
     /**
-     * Options disponibles par pays
+     * Retourne les opérateurs disponibles pour un pays spécifique
      */
     public List<String> getOptionsByCountry(String country) {
-        return List.of("Wave", "Moov", "Orange Money");
+        if (country == null || country.isEmpty()) return List.of();
+        return routeSelectionService.getAvailableOperatorsByCountry(country);
     }
 
     /**
-     * Initie un paiement avec fallback réel entre plusieurs providers
+     * Initie un paiement avec fallback direct sur les agrégateurs (sans passer par la BDD des routes)
      */
     public Payment initiatePayment(User user, double amount, String country, String operatorInput, String phone,
             String firstname,
@@ -80,49 +80,56 @@ public class PaymentService {
         payment.setCountry(countryCode);
         payment.setUsedFallback(false);
         payment.setCreatedAt(LocalDateTime.now());
-        payment.setUpdatedAt(LocalDateTime.now());
         payment.setAttemptCount(0);
 
         paymentRepository.save(payment);
 
-        // 2. Récupérer toutes les routes disponibles triées par score pour ce pays
-        List<Route> availableRoutes = routeSelectionService.getSortedRoutes(operator, countryCode);
-
-        if (availableRoutes.isEmpty()) {
-            log.error("No available route for operator {}", operator);
+        // Validation du numéro de téléphone par rapport au pays
+        if (!isPhoneNumberValidForCountry(phone, countryCode)) {
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason("NO_ROUTE_AVAILABLE");
+            payment.setFailureReason("INVALID_PHONE_NUMBER");
             paymentRepository.save(payment);
+            log.warn("Invalid phone number {} for country {}", phone, countryCode);
+            return payment;
+        }
+
+        // 2. Liste dynamique des agrégateurs via RouteSelectionService
+        List<com.Api.Fidelitypay.model.Route> routes = routeSelectionService.getSortedRoutes(operator, countryCode);
+        List<String> providersToTry = routes.stream().map(com.Api.Fidelitypay.model.Route::getProvider).toList();
+
+        if (providersToTry.isEmpty()) {
+            payment.setStatus(PaymentStatus.FAILED);
+            payment.setFailureReason("NO_PROVIDER_AVAILABLE_FOR_COUNTRY");
+            paymentRepository.save(payment);
+            log.warn("No providers available for country {} and operator {}", countryCode, operator);
             return payment;
         }
 
         PaymentResult finalResult = null;
-        Route finalRouteUsed = null;
+        String finalProviderUsed = null;
         boolean success = false;
         int attempt = 0;
-        String primaryProvider = availableRoutes.get(0).getProvider();
+        String primaryProvider = providersToTry.get(0);
 
-        // 3. Boucle de fallback (essaye chaque route jusqu'au succès ou erreur
-        // non-technique)
-        for (Route route : availableRoutes) {
+        // 3. Boucle de fallback (essaye chaque provider)
+        for (String providerName : providersToTry) {
             attempt++;
-            log.info("🚀 Attempt {}: Trying route {} (Provider: {}) for payment {}",
-                    attempt, route.getName(), route.getProvider(), paymentId);
+            log.info("🚀 Attempt {}: Trying provider {} for payment {}",
+                    attempt, providerName, paymentId);
 
-            PaymentResult result = executeRoute(route, amount, countryCode, operator, phone, firstname, lastname,
-                    email);
+            PaymentResult result = executeProvider(providerName, amount, countryCode, operator, phone, firstname, lastname, email);
 
             if (result != null && result.isSuccess()) {
                 success = true;
                 finalResult = result;
-                finalRouteUsed = route;
+                finalProviderUsed = providerName;
                 payment.setUsedFallback(attempt > 1);
                 payment.setAttemptCount(attempt);
                 if (attempt > 1) {
-                    payment.setFallbackReason("PRIMARY_ROUTE_FAILED");
-                    log.info("✅ Fallback SUCCESS on attempt {} with producer {}", attempt, route.getProvider());
+                    payment.setFallbackReason("PRIMARY_PROVIDER_FAILED");
+                    log.info("✅ Fallback SUCCESS on attempt {} with provider {}", attempt, providerName);
                 } else {
-                    log.info("✅ Primary route SUCCESS with producer {}", route.getProvider());
+                    log.info("✅ Primary provider SUCCESS with {}", providerName);
                 }
                 break;
             }
@@ -131,26 +138,25 @@ public class PaymentService {
             String errorMsg = (result != null) ? result.getRawResponse() : "NO_RESPONSE";
             ErrorType errorType = (result != null) ? result.getErrorType() : ErrorType.UNKNOWN;
 
-            // Log de l'échec pour cette route
-            logRouteAttempt(attempt == 1 ? "PRIMARY" : "FALLBACK", route, false, errorMsg, errorType);
-            saveLog(paymentId, route, result, false, determineFailureReason(errorMsg, errorType),
+            // Log de l'échec
+            logProviderAttempt(attempt == 1 ? "PRIMARY" : "FALLBACK", providerName, false, errorMsg, errorType);
+            saveLog(paymentId, providerName, result, false, determineFailureReason(errorMsg, errorType),
                     errorType, attempt > 1, (attempt > 1 ? "MULTI_STEP_FALLBACK" : null), primaryProvider);
 
             // Est-ce une erreur technique permettant de continuer ?
             if (!shouldTriggerFallback(errorMsg, errorType)) {
                 log.warn("❌ Stop fallback: Non-technical error encountered: {}", errorMsg);
                 finalResult = result;
-                finalRouteUsed = route;
+                finalProviderUsed = providerName;
                 break;
             }
 
-            // Si c'était la dernière route, on s'arrête
             finalResult = result;
-            finalRouteUsed = route;
-            if (attempt >= availableRoutes.size()) {
-                log.error("❌ All available routes failed for operator {}", operator);
+            finalProviderUsed = providerName;
+            if (attempt >= providersToTry.size()) {
+                log.error("❌ All providers failed for operator {}", operator);
             } else {
-                log.info("🔄 Technical error, trying next available route...");
+                log.info("🔄 Technical error, trying next provider...");
             }
         }
 
@@ -158,10 +164,10 @@ public class PaymentService {
         payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
         payment.setUpdatedAt(LocalDateTime.now());
 
-        if (finalRouteUsed != null) {
-            payment.setRouteName(finalRouteUsed.getName());
-            payment.setProvider(finalRouteUsed.getProvider());
-            payment.setCost(BigDecimal.valueOf(success ? finalRouteUsed.getCost() : 0.0));
+        if (finalProviderUsed != null) {
+            payment.setRouteName(finalProviderUsed);
+            payment.setProvider(finalProviderUsed);
+            payment.setCost(BigDecimal.ZERO);
 
             String health = success ? "HEALTHY"
                     : (isTechnicalError((finalResult != null ? finalResult.getRawResponse() : null)) ? "DOWN"
@@ -184,34 +190,52 @@ public class PaymentService {
 
         paymentRepository.save(payment);
 
-        // Log final (seulement si pas déjà loggé dans la boucle pour l'échec final ou
-        // le succès)
-        saveLog(paymentId, finalRouteUsed, finalResult, success, payment.getFailureReason(),
+        saveLog(paymentId, finalProviderUsed, finalResult, success, payment.getFailureReason(),
                 payment.getErrorType(), payment.isUsedFallback(), payment.getFallbackReason(), primaryProvider);
 
-        // Envoyer la notification via Webhook (indépendamment du succès/échec)
         webhookService.sendWebhook(payment);
 
         return payment;
     }
 
-    private PaymentResult executeRoute(Route route, double amount, String country, String operator, String phone,
+    private boolean isPhoneNumberValidForCountry(String phone, String country) {
+        if (phone == null || phone.isEmpty() || country == null || country.isEmpty()) {
+            return true;
+        }
+        String cleanPhone = phone.replaceAll("\\s+", "");
+        if (country.equalsIgnoreCase("MALI") || country.equalsIgnoreCase("ML")) {
+            return cleanPhone.startsWith("+223") || cleanPhone.startsWith("00223") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+        } else if (country.equalsIgnoreCase("BENIN") || country.equalsIgnoreCase("BJ")) {
+            return cleanPhone.startsWith("+229") || cleanPhone.startsWith("00229") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+        } else if (country.equalsIgnoreCase("SENEGAL") || country.equalsIgnoreCase("SN")) {
+            return cleanPhone.startsWith("+221") || cleanPhone.startsWith("00221") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 9 && cleanPhone.length() <= 10);
+        } else if (country.equalsIgnoreCase("COTE D'IVOIRE") || country.equalsIgnoreCase("CI")) {
+            return cleanPhone.startsWith("+225") || cleanPhone.startsWith("00225") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 10 && cleanPhone.length() <= 11);
+        } else if (country.equalsIgnoreCase("TOGO") || country.equalsIgnoreCase("TG")) {
+            return cleanPhone.startsWith("+228") || cleanPhone.startsWith("00228") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+        } else if (country.equalsIgnoreCase("GUINEA") || country.equalsIgnoreCase("GN")) {
+            return cleanPhone.startsWith("+224") || cleanPhone.startsWith("00224") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+        }
+        return true;
+    }
+
+    private PaymentResult executeProvider(String providerName, double amount, String country, String operator, String phone,
             String firstname, String lastname, String email) {
-        if (route == null)
+        if (providerName == null)
             return null;
 
         try {
-            switch (route.getProvider().toUpperCase()) {
+            switch (providerName.toUpperCase()) {
                 case "KKIAPAY":
                     return kkiapayClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
                 case "PAYDUNYA":
                     return payDunyaClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
                 default:
-                    log.warn("Unsupported provider {}", route.getProvider());
+                    log.warn("Unsupported provider {}", providerName);
                     return null;
             }
         } catch (Exception e) {
-            log.error("Exception during route execution: {}", route.getName(), e);
+            log.error("Exception during provider execution: {}", providerName, e);
             PaymentResult error = new PaymentResult(false);
             error.setRawResponse("EXCEPTION: " + e.getMessage());
             error.setErrorType(ErrorType.INTERNAL_ERROR);
@@ -219,14 +243,14 @@ public class PaymentService {
         }
     }
 
-    private void saveLog(String paymentId, Route routeUsed, PaymentResult result, boolean success,
+    private void saveLog(String paymentId, String providerUsed, PaymentResult result, boolean success,
             String failureReason, ErrorType errorType, boolean fallbackUsed, String fallbackReason,
             String primaryProvider) {
         try {
             LogEntry logEntry = new LogEntry();
             logEntry.setPaymentId(paymentId);
-            logEntry.setRouteUsed(routeUsed != null ? routeUsed.getName() : "UNKNOWN");
-            logEntry.setProvider(routeUsed != null ? routeUsed.getProvider() : "UNKNOWN");
+            logEntry.setRouteUsed(providerUsed != null ? providerUsed : "UNKNOWN");
+            logEntry.setProvider(providerUsed != null ? providerUsed : "UNKNOWN");
             logEntry.setResponseTime(result != null ? result.getResponseTimeMs() : 0.0);
             logEntry.setStatus(success ? LogStatus.SUCCESS : LogStatus.FAILED);
             logEntry.setFailureReason(failureReason);
@@ -313,12 +337,12 @@ public class PaymentService {
                 error.contains("404") || error.contains("401") || error.contains("403");
     }
 
-    private void logRouteAttempt(String type, Route route, boolean success, String errorMsg, ErrorType errorType) {
+    private void logProviderAttempt(String type, String providerName, boolean success, String errorMsg, ErrorType errorType) {
         if (success) {
-            log.info("✅ {} route SUCCESS: {}", type, route.getName());
+            log.info("✅ {} provider SUCCESS: {}", type, providerName);
         } else {
-            log.warn("❌ {} route FAILED: {} | Type: {} | Error: {}",
-                    type, route.getName(), errorType, errorMsg);
+            log.warn("❌ {} provider FAILED: {} | Type: {} | Error: {}",
+                    type, providerName, errorType, errorMsg);
         }
     }
 

@@ -5,8 +5,11 @@ import com.Api.Fidelitypay.repository.RouteRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -24,7 +27,7 @@ public class RouteSelectionService {
     public Route selectBestRoute(String operator, String country) {
         List<Route> routes = getSortedRoutes(operator, country);
         if (routes.isEmpty()) {
-            log.warn("No available route for operator {}", operator);
+            log.warn("No available route for operator {} in country {}", operator, country);
             return null;
         }
 
@@ -50,22 +53,41 @@ public class RouteSelectionService {
     }
 
     /**
-     * Récupère TOUTES les routes disponibles de l'opérateur et les trie
-     * intelligemment
-     * en favorisant le pays cible.
+     * Récupère les opérateurs distincts disponibles pour un pays donné
      */
-    public List<Route> getSortedRoutes(String operator, String targetCountry) {
-        List<Route> allRoutes = routeRepository.findByAvailabilityTrueAndOperator(operator);
-
-        return allRoutes.stream()
-                .sorted(Comparator.comparingDouble(r -> calculateScore(r, targetCountry)))
-                .toList();
+    public List<String> getAvailableOperatorsByCountry(String country) {
+        return routeRepository.findDistinctOperatorsByCountry(country);
     }
 
     /**
-     * Calcul du score global de la route avec affinité géographique
+     * Récupère TOUTES les routes disponibles (UP) en ignorant la contrainte stricte d'opérateur,
+     * puis les trie par pertinence pour le pays ciblé,
+     * et retourne une seule route par provider (pour éviter d'essayer 2 fois le même agrégateur).
      */
-    private double calculateScore(Route route, String targetCountry) {
+    public List<Route> getSortedRoutes(String operator, String targetCountry) {
+        // 1. Récupérer TOUTES les routes disponibles sans se soucier de l'opérateur
+        List<Route> allRoutes = routeRepository.findByAvailabilityTrue();
+
+        // 2. Trier ces routes par notre système de score (qui valorise le pays et l'opérateur s'il correspond)
+        List<Route> sortedRoutes = allRoutes.stream()
+                .filter(r -> r.getCountry() == null || r.getCountry().isEmpty() || r.getCountry().equalsIgnoreCase(targetCountry))
+                .sorted(Comparator.comparingDouble(r -> calculateScore(r, targetCountry, operator)))
+                .toList();
+
+        // 3. Ne garder qu'une seule route par Provider pour construire le pipeline de Fallback
+        // Par exemple: 1er KKIAPAY, 2ème PAYDUNYA
+        Map<String, Route> uniqueProviders = new LinkedHashMap<>();
+        for (Route route : sortedRoutes) {
+            uniqueProviders.putIfAbsent(route.getProvider().toUpperCase(), route);
+        }
+
+        return new ArrayList<>(uniqueProviders.values());
+    }
+
+    /**
+     * Calcul du score global de la route avec affinité géographique et opérateur
+     */
+    private double calculateScore(Route route, String targetCountry, String targetOperator) {
         double costWeight = 0.5;
         double latencyWeight = 0.3;
         double failureWeight = 0.2;
@@ -74,6 +96,11 @@ public class RouteSelectionService {
                 + (route.getAvgLatency() * latencyWeight / 1000)
                 + (route.getFailureRate() * failureWeight)
                 + route.getPriority();
+
+        // Bonus : Si la route a été spécifiquement créée pour cet opérateur, on la privilégie.
+        if (targetOperator != null && route.getOperator() != null && route.getOperator().equalsIgnoreCase(targetOperator)) {
+            baseScore -= 5.0; 
+        }
 
         // LOGIQUE D'AFFINITÉ GÉOGRAPHIQUE
         // Priorité 1 : Le pays correspond parfaitement

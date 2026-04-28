@@ -61,7 +61,9 @@ headers.setContentType(MediaType.APPLICATION_JSON);
 headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
 headers.set("x-private-key", kkiapayProperties.getApi().getPrivateKey());
 headers.set("x-secret-key", kkiapayProperties.getApi().getSecretKey());
-
+log.info("PUBLIC='{}'", kkiapayProperties.getApi().getPublicKey());
+log.info("PRIVATE='{}'", kkiapayProperties.getApi().getPrivateKey());
+log.info("SECRET='{}'", kkiapayProperties.getApi().getSecretKey());
             boolean isWave = "WAVE".equalsIgnoreCase(operator);
             String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
 

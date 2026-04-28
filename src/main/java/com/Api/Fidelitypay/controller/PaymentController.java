@@ -1,11 +1,8 @@
-
 package com.Api.Fidelitypay.controller;
 
 import com.Api.Fidelitypay.controller.dto.PaymentInitiateRequest;
 import com.Api.Fidelitypay.controller.dto.PaymentResponseDTO;
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.model.Route;
-import com.Api.Fidelitypay.repository.RouteRepository;
 import com.Api.Fidelitypay.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +20,6 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService paymentService;
-    private final RouteRepository routeRepository;
 
     /**
      * Liste des moyens de paiement disponibles par pays
@@ -57,26 +53,13 @@ public class PaymentController {
                 request.getLastname(),
                 request.getEmail());
 
-        // Récupération des infos de la route utilisée
-        boolean routeAvailable = false;
-        String routeName = payment.getRouteName();
-        String routeProvider = payment.getProvider();
-        double routeLatency = 0.0;
-
-        if (routeName != null) {
-            Route route = routeRepository.findByName(routeName).orElse(null);
-            if (route != null) {
-                routeAvailable = route.isAvailability();
-                routeLatency = route.getAvgLatency();
-            }
-        }
-
+        // Le provider est directement disponible dans l'objet payment
         PaymentResponseDTO response = PaymentResponseDTO.builder()
                 .payment(payment)
-                .routeAvailable(routeAvailable)
-                .routeName(routeName)
-                .routeProvider(routeProvider)
-                .routeLatency(routeLatency)
+                .routeAvailable(payment.getProvider() != null)
+                .routeName(payment.getProvider())
+                .routeProvider(payment.getProvider())
+                .routeLatency(0.0)
                 .build();
 
         return ResponseEntity.ok(response);

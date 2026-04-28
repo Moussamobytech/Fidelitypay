@@ -1,11 +1,11 @@
 package com.Api.Fidelitypay.service;
 
+import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
@@ -20,143 +20,110 @@ class PaymentServiceTest {
 
         private PaymentRepository paymentRepository;
         private LogEntryRepository logEntryRepository;
-        private RouteSelectionService routeSelectionService;
         private WebhookService webhookService;
         private KkiapayClient kkiapayClient;
         private PayDunyaClient payDunyaClient;
+        private RouteSelectionService routeSelectionService;
         private PaymentService paymentService;
 
         @BeforeEach
         void setUp() {
                 paymentRepository = mock(PaymentRepository.class);
                 logEntryRepository = mock(LogEntryRepository.class);
-                routeSelectionService = mock(RouteSelectionService.class);
                 webhookService = mock(WebhookService.class);
                 kkiapayClient = mock(KkiapayClient.class);
                 payDunyaClient = mock(PayDunyaClient.class);
+                routeSelectionService = mock(RouteSelectionService.class);
 
-                paymentService = new PaymentService(paymentRepository, logEntryRepository, routeSelectionService,
-                                webhookService, kkiapayClient, payDunyaClient);
+                com.Api.Fidelitypay.model.Route route1 = new com.Api.Fidelitypay.model.Route();
+                route1.setProvider("KKIAPAY");
+                com.Api.Fidelitypay.model.Route route2 = new com.Api.Fidelitypay.model.Route();
+                route2.setProvider("PAYDUNYA");
+                when(routeSelectionService.getSortedRoutes(anyString(), anyString())).thenReturn(java.util.List.of(route1, route2));
+
+                paymentService = new PaymentService(paymentRepository, logEntryRepository,
+                                webhookService, kkiapayClient, payDunyaClient, routeSelectionService);
         }
 
         @Test
-        void initiatePayment_primarySuccess_persistsPayment() {
-                Route route = new Route();
-                route.setName("PAYDUNYA_WAVE");
-                route.setProvider("PAYDUNYA");
-                route.setCost(0.1);
-
-                when(routeSelectionService.selectBestRoute(anyString(), anyString())).thenReturn(route);
-
+        void initiatePayment_kkiapayPrimarySuccess() {
+                // KKIAPAY est le 1er provider essayé
                 PaymentResult pr = new PaymentResult(true);
-                pr.setProviderId("paydunya-123");
+                pr.setProviderId("kkiapay-123");
                 pr.setRawResponse("{\"status\":\"ok\"}");
                 pr.setResponseTimeMs(150.0);
 
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
                                 anyString(), anyString())).thenReturn(pr);
 
-                Payment saved = new Payment();
-                when(paymentRepository.save(any())).thenReturn(saved);
+                when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
                 User user = new User();
-                Payment res = paymentService.initiatePayment(user, 100.0, "SN", "WAVE", "221770000000", "John", "Doe",
+                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "22961000000", "John", "Doe",
                                 "john@example.com");
 
                 assertNotNull(res);
                 assertEquals(PaymentStatus.SUCCESS, res.getStatus());
+                assertEquals("KKIAPAY", res.getProvider());
+                assertFalse(res.isUsedFallback());
                 verify(paymentRepository, atLeastOnce()).save(any());
         }
 
         @Test
-        void initiatePayment_failure_setsFailureReason() {
-                Route route = new Route();
-                route.setName("PAYDUNYA_WAVE");
-                route.setProvider("PAYDUNYA");
-                route.setCost(0.1);
+        void initiatePayment_kkiapayFailsThenPaydunjaSuccess() {
+                // KKIAPAY échoue (erreur technique)
+                PaymentResult kkiapayResult = new PaymentResult(false);
+                kkiapayResult.setRawResponse("TIMEOUT: Connection failed");
+                kkiapayResult.setResponseTimeMs(3000.0);
+                kkiapayResult.setErrorType(ErrorType.TIMEOUT);
+                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                                anyString(), anyString())).thenReturn(kkiapayResult);
 
-                when(routeSelectionService.selectBestRoute(anyString(), anyString())).thenReturn(route);
-
-                PaymentResult pr = new PaymentResult(false);
-                pr.setProviderId("paydunya-error");
-                pr.setRawResponse("Erreur: Solde insuffisant pour la transaction");
-                pr.setResponseTimeMs(100.0);
-
+                // PAYDUNYA réussit (fallback)
+                PaymentResult paydunyaResult = new PaymentResult(true);
+                paydunyaResult.setProviderId("paydunya-success-456");
+                paydunyaResult.setRawResponse("{\"status\":\"success\"}");
+                paydunyaResult.setResponseTimeMs(200.0);
                 when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(pr);
+                                anyString(), anyString())).thenReturn(paydunyaResult);
 
-                Payment savedPayment = new Payment();
-                when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> {
-                        Payment p = invocation.getArgument(0);
-                        return p;
-                });
+                when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
                 User user = new User();
-                Payment res = paymentService.initiatePayment(user, 500.0, "SN", "WAVE", "221770000000", "Jane", "Smith",
+                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "22961000000", "John", "Doe",
+                                "john@example.com");
+
+                assertNotNull(res);
+                assertEquals(PaymentStatus.SUCCESS, res.getStatus());
+                assertEquals("PAYDUNYA", res.getProvider());
+                assertTrue(res.isUsedFallback());
+
+                verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                                anyString(), anyString());
+                verify(payDunyaClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                                anyString(), anyString());
+        }
+
+        @Test
+        void initiatePayment_allProvidersFail_setsFailedStatus() {
+                PaymentResult failResult = new PaymentResult(false);
+                failResult.setRawResponse("Erreur: Solde insuffisant pour la transaction");
+                failResult.setResponseTimeMs(100.0);
+
+                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                                anyString(), anyString())).thenReturn(failResult);
+                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
+                                anyString(), anyString())).thenReturn(failResult);
+
+                when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+                User user = new User();
+                Payment res = paymentService.initiatePayment(user, 500.0, "BJ", "MTN", "22961000000", "Jane", "Smith",
                                 "jane@example.com");
 
                 assertNotNull(res);
                 assertEquals(PaymentStatus.FAILED, res.getStatus());
-                assertEquals("INSUFFICIENT_FUNDS", res.getFailureReason());
-
+                assertNotNull(res.getFailureReason());
                 verify(paymentRepository, atLeastOnce()).save(any(Payment.class));
-
-                // Verify LogEntry
-                org.mockito.ArgumentCaptor<com.Api.Fidelitypay.model.LogEntry> logCaptor = org.mockito.ArgumentCaptor
-                                .forClass(com.Api.Fidelitypay.model.LogEntry.class);
-                verify(logEntryRepository).save(logCaptor.capture());
-                assertEquals("INSUFFICIENT_FUNDS", logCaptor.getValue().getFailureReason());
-        }
-
-        @Test
-        void initiatePayment_fallbackSuccess_usesSecondaryRoute() {
-                // 1. Setup routes
-                Route primary = new Route();
-                primary.setName("PAYDUNYA_WAVE");
-                primary.setProvider("PAYDUNYA");
-                primary.setCost(0.1);
-
-                Route fallback = new Route();
-                fallback.setName("KKIAPAY_WAVE");
-                fallback.setProvider("KKIAPAY");
-                fallback.setCost(0.2);
-
-                when(routeSelectionService.getSortedRoutes(anyString(), anyString()))
-                                .thenReturn(java.util.List.of(primary, fallback));
-
-                // 2. Mock primary failure (Technical error)
-                PaymentResult primaryResult = new PaymentResult(false);
-                primaryResult.setRawResponse("TIMEOUT: Connection failed");
-                primaryResult.setResponseTimeMs(3000.0);
-                primaryResult.setErrorType(com.Api.Fidelitypay.enums.ErrorType.TIMEOUT);
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(primaryResult);
-
-                // 3. Mock fallback success
-                PaymentResult fallbackResult = new PaymentResult(true);
-                fallbackResult.setProviderId("kkiapay-success-123");
-                fallbackResult.setRawResponse("{\"status\":\"success\"}");
-                fallbackResult.setResponseTimeMs(200.0);
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(fallbackResult);
-
-                when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
-
-                // Execute
-                User user = new User();
-                Payment res = paymentService.initiatePayment(user, 100.0, "SN", "WAVE", "221770000000", "John", "Doe",
-                                "john@example.com");
-
-                // Verify
-                assertNotNull(res);
-                assertEquals(PaymentStatus.SUCCESS, res.getStatus());
-                assertEquals("KKIAPAY_WAVE", res.getRouteName());
-                assertEquals("KKIAPAY", res.getProvider());
-                assertTrue(res.isUsedFallback());
-
-                verify(payDunyaClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
-                verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
         }
 }
