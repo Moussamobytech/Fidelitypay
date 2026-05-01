@@ -65,10 +65,13 @@ public class PayDunyaClient {
             headers.set("PAYDUNYA-TOKEN", paydunyaProperties.getApi().getToken());
 
             // 📦 Payload
+            PayDunyaInvoiceDTO invoiceDTO = new PayDunyaInvoiceDTO(
+                    amount,
+                    "Payment via " + operator + " (" + country + ")",
+                    getPayDunyaChannels(operator, country));
+
             PayDunyaRequestDTO payload = new PayDunyaRequestDTO(
-                    new PayDunyaInvoiceDTO(
-                            amount,
-                            "Payment via " + operator + " (" + country + ")"),
+                    invoiceDTO,
                     new PayDunyaStoreDTO(paydunyaProperties.getStore().getName()));
 
             HttpEntity<PayDunyaRequestDTO> entity = new HttpEntity<>(payload, headers);
@@ -107,7 +110,7 @@ public class PayDunyaClient {
                 String code = payDunyaResponse.getResponseCode();
                 if ("1001".equals(code) || "1002".equals(code) || "4001".equals(code)) {
                     result.setErrorType(ErrorType.AUTHENTICATION);
-                } else if ("400".equals(code)) {
+                } else if ("400".equals(code) || "1003".equals(code)) {
                     result.setErrorType(ErrorType.BAD_REQUEST);
                 } else {
                     result.setErrorType(ErrorType.UNKNOWN);
@@ -140,6 +143,38 @@ public class PayDunyaClient {
 
             return result;
         }
+    }
+
+    private java.util.List<String> getPayDunyaChannels(String operator, String country) {
+        if (operator == null || country == null) return java.util.List.of("unknown");
+        String op = operator.toUpperCase().trim();
+        String c = country.toUpperCase().trim();
+        
+        if ("SN".equals(c) || "SENEGAL".equals(c)) {
+            if ("WAVE".equals(op)) return java.util.List.of("wave-senegal");
+            if ("OM".equals(op) || "ORANGE".equals(op)) return java.util.List.of("orange-money-senegal");
+            if ("FREE".equals(op)) return java.util.List.of("free-money-senegal");
+            if ("EXPRESSO".equals(op)) return java.util.List.of("expresso-senegal");
+        } else if ("CI".equals(c) || "COTE D'IVOIRE".equals(c) || "CIV".equals(c)) {
+            if ("WAVE".equals(op)) return java.util.List.of("wave-ci");
+            if ("OM".equals(op) || "ORANGE".equals(op)) return java.util.List.of("orange-money-ci");
+            if ("MTN".equals(op)) return java.util.List.of("mtn-ci");
+            if ("MOOV".equals(op)) return java.util.List.of("moov-ci");
+            if ("TRESOR".equals(op) || "TRESORMONEY".equals(op)) return java.util.List.of("tresormoney-ci");
+        } else if ("BJ".equals(c) || "BENIN".equals(c)) {
+            if ("MTN".equals(op)) return java.util.List.of("mtn-benin");
+            if ("MOOV".equals(op)) return java.util.List.of("moov-benin");
+        } else if ("TG".equals(c) || "TOGO".equals(c)) {
+            if ("TMONEY".equals(op)) return java.util.List.of("tmoney-togo");
+            if ("MOOV".equals(op)) return java.util.List.of("moov-togo");
+        } else if ("ML".equals(c) || "MALI".equals(c)) {
+            if ("OM".equals(op) || "ORANGE".equals(op)) return java.util.List.of("orange-money-mali");
+            if ("MOOV".equals(op)) return java.util.List.of("moov-mali");
+            if ("SAMA".equals(op)) return java.util.List.of("sama-money");
+        }
+        
+        // Si non trouvé, on envoie l'opérateur tel quel pour que l'API PayDunya le valide (ou le rejette si invalide)
+        return java.util.List.of(op.toLowerCase());
     }
     
     private String mask(String key) {

@@ -93,6 +93,9 @@ public class PaymentService {
             return payment;
         }
 
+        // Aucune validation stricte de l'opérateur en local.
+        // L'agrégateur gère les opérateurs et les valide de son côté (en production).
+
         // 2. Liste dynamique des agrégateurs via RouteSelectionService
         List<com.Api.Fidelitypay.model.Route> routes = routeSelectionService.getSortedRoutes(operator, countryCode);
         List<String> providersToTry = routes.stream().map(com.Api.Fidelitypay.model.Route::getProvider).toList();
@@ -306,8 +309,10 @@ public class PaymentService {
             return "INSUFFICIENT_FUNDS";
         if (error.contains("TIMEOUT") || error.contains("TIME_OUT"))
             return "TIMEOUT";
-        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID"))
+        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID PHONE"))
             return "INVALID_PHONE_NUMBER";
+        if (error.contains("PAYMENT CHANNEL") || error.contains("INVALID_OPERATOR") || error.contains("NOT A VALID PAYMENT CHANNEL"))
+            return "INVALID_OPERATOR";
         if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401"))
             return "AUTHENTICATION_FAILED";
         if (error.contains("CANCEL"))

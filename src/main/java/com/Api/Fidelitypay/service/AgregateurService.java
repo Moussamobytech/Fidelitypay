@@ -23,6 +23,9 @@ public class AgregateurService {
     }
 
     public Agregateur createAgregateur(Agregateur agregateur) {
+        if (agregateur.getCountryConfigs() != null) {
+            agregateur.getCountryConfigs().forEach(config -> config.setAgregateur(agregateur));
+        }
         return agregateurRepository.save(agregateur);
     }
 
@@ -32,8 +35,16 @@ public class AgregateurService {
             agregateur.setCleApblic(agregateurDetails.getCleApblic());
             agregateur.setCleApr(agregateurDetails.getCleApr());
             agregateur.setCleAtoken(agregateurDetails.getCleAtoken());
-            agregateur.setNompays(agregateurDetails.getNompays());
-            agregateur.setNomOperateur(agregateurDetails.getNomOperateur());
+            
+            // Sync country configs
+            agregateur.getCountryConfigs().clear();
+            if (agregateurDetails.getCountryConfigs() != null) {
+                agregateurDetails.getCountryConfigs().forEach(config -> {
+                    config.setAgregateur(agregateur);
+                    agregateur.getCountryConfigs().add(config);
+                });
+            }
+            
             return agregateurRepository.save(agregateur);
         }).orElseThrow(() -> new RuntimeException("Agregateur not found with id " + id));
     }

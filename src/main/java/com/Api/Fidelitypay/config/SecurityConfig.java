@@ -80,10 +80,12 @@ public class SecurityConfig {
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                                 .csrf(AbstractHttpConfigurer::disable)
                                 .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                                                 .requestMatchers("/api/v1/auth/**").permitAll()
                                                 .requestMatchers("/actuator/**").permitAll()
                                                 .requestMatchers("/api/v1/developer/health").permitAll()
                                                 .requestMatchers("/api/payments/callback/**").permitAll()
+                                                .requestMatchers("/api/v1/admin/agregateurs/**").permitAll()
                                                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                                                 .requestMatchers("/api/v1/developer/**", "/api/payments/**",
                                                                 "/api/monitoring/**")

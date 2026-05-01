@@ -14,4 +14,6 @@ public class PayDunyaInvoiceDTO {
     private double totalAmount;
 
     private String description;
+    
+    private java.util.List<String> channels;
 }
