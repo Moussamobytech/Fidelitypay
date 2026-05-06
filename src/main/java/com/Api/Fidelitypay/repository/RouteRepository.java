@@ -64,6 +64,11 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     Optional<Route> findByName(String name);
 
     /**
+     * Vérifie si une route existe par son nom.
+     */
+    boolean existsByName(String name);
+
+    /**
      * Récupère les opérateurs distincts disponibles pour un pays spécifique (ou globaux).
      */
     @Query("SELECT DISTINCT r.operator FROM Route r WHERE r.availability = true AND (LOWER(r.country) = LOWER(:country) OR r.country IS NULL OR r.country = '') AND r.operator IS NOT NULL")

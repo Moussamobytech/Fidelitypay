@@ -25,4 +25,8 @@ public class KkiapayRequestDTO {
     private String reason;
     private String success_url;
     private String error_url;
+    private String operator;
+    private String payment_method;
+    @com.fasterxml.jackson.annotation.JsonProperty("method")
+    private String directMethod;
 }

@@ -8,6 +8,7 @@ import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Payment;
+import com.Api.Fidelitypay.model.Route;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
@@ -64,7 +65,7 @@ public class PaymentService {
             String firstname,
             String lastname, String email) {
 
-        String operator = (operatorInput != null) ? operatorInput.toUpperCase().trim() : "UNKNOWN";
+        String operator = normalizeOperator(operatorInput);
         String countryCode = (country != null) ? country.toUpperCase().trim() : "UNKNOWN";
         String paymentId = UUID.randomUUID().toString();
 
@@ -93,18 +94,17 @@ public class PaymentService {
             return payment;
         }
 
-        // Aucune validation stricte de l'opérateur en local.
-        // L'agrégateur gère les opérateurs et les valide de son côté (en production).
-
-        // 2. Liste dynamique des agrégateurs via RouteSelectionService
-        List<com.Api.Fidelitypay.model.Route> routes = routeSelectionService.getSortedRoutes(operator, countryCode);
-        List<String> providersToTry = routes.stream().map(com.Api.Fidelitypay.model.Route::getProvider).toList();
+        // 2. Récupérer les providers ordonnés pour ce pays/opérateur
+        List<String> providersToTry = routeSelectionService.getSortedRoutes(operator, countryCode)
+                .stream()
+                .map(Route::getProvider)
+                .toList();
 
         if (providersToTry.isEmpty()) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason("NO_PROVIDER_AVAILABLE_FOR_COUNTRY");
             paymentRepository.save(payment);
-            log.warn("No providers available for country {} and operator {}", countryCode, operator);
+            log.warn("No providers configured in dashboard for country {} and operator {}", countryCode, operator);
             return payment;
         }
 
@@ -164,7 +164,11 @@ public class PaymentService {
         }
 
         // 4. Finaliser le paiement
-        payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
+        if (success) {
+            payment.setStatus((finalResult != null && finalResult.isPending()) ? PaymentStatus.PENDING : PaymentStatus.SUCCESS);
+        } else {
+            payment.setStatus(PaymentStatus.FAILED);
+        }
         payment.setUpdatedAt(LocalDateTime.now());
 
         if (finalProviderUsed != null) {
@@ -182,6 +186,11 @@ public class PaymentService {
             payment.setProviderPaymentId(finalResult.getProviderId());
             payment.setProviderResponse(finalResult.getRawResponse());
             payment.setPaymentUrl(finalResult.getPaymentUrl());
+            
+            if (finalResult.getActualOperator() != null) {
+                payment.setOperator(finalResult.getActualOperator().toUpperCase());
+            }
+            
             payment.setProviderResponseTimeMs((long) finalResult.getResponseTimeMs());
             payment.setErrorType(finalResult.getErrorType());
 
@@ -412,5 +421,20 @@ public class PaymentService {
                 webhookService.sendWebhook(payment);
             }
         });
+    }
+
+    private String normalizeOperator(String op) {
+        if (op == null || op.isEmpty()) return "UNKNOWN";
+        String upper = op.toUpperCase().trim();
+        
+        if (upper.contains("MOOV")) return "MOOV";
+        if (upper.contains("MTN")) return "MTN";
+        if (upper.contains("WAVE")) return "WAVE";
+        if (upper.contains("ORANGE") || upper.equals("OM")) return "ORANGE";
+        if (upper.contains("FREE")) return "FREE";
+        if (upper.contains("YAS") || upper.contains("MIXX")) return "YAS";
+        if (upper.contains("TMO")) return "TMO"; // Togocel
+        
+        return upper;
     }
 }

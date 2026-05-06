@@ -14,6 +14,24 @@ public class PaymentResult {
     private String rawResponse;
     private double responseTimeMs;
     private ErrorType errorType;
+    private String actualOperator;
+    private boolean isPending;
+
+    public String getActualOperator() {
+        return actualOperator;
+    }
+
+    public void setActualOperator(String actualOperator) {
+        this.actualOperator = actualOperator;
+    }
+
+    public boolean isPending() {
+        return isPending;
+    }
+
+    public void setPending(boolean pending) {
+        isPending = pending;
+    }
 
     public PaymentResult() {
         this.success = true;

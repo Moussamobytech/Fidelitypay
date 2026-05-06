@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface AgregateurRepository extends JpaRepository<Agregateur, Long> {
+    java.util.Optional<Agregateur> findByNomAIgnoreCase(String nomA);
 }
