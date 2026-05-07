@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class KkiapayRequestDTO {
     private int amount;
+    @com.fasterxml.jackson.annotation.JsonProperty("phone_number")
     private String phoneNumber;
     private String country;
     private String firstname;
@@ -26,6 +27,7 @@ public class KkiapayRequestDTO {
     private String success_url;
     private String error_url;
     private String operator;
+    @com.fasterxml.jackson.annotation.JsonProperty("payment_method")
     private String payment_method;
     @com.fasterxml.jackson.annotation.JsonProperty("method")
     private String directMethod;

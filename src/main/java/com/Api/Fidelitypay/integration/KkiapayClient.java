@@ -92,7 +92,9 @@ public class KkiapayClient {
             if (kkiapayOperator.contains("mtn")) kkiapayOperator = "momo";
             else if (kkiapayOperator.contains("moov")) kkiapayOperator = "moov";
             
-            // 📦 Payload
+            // 📦 Payload & Phone Sanitization
+            String cleanPhone = (phone != null) ? phone.replaceAll("[^0-9]", "") : "";
+            
             KkiapayRequestDTO.KkiapayRequestDTOBuilder payloadBuilder = KkiapayRequestDTO.builder()
                     .amount((int) amount)
                     .country(country)
@@ -101,7 +103,7 @@ public class KkiapayClient {
                     .operator(kkiapayOperator)
                     .payment_method(kkiapayOperator)
                     .directMethod(kkiapayOperator)
-                    .phoneNumber(phone)
+                    .phoneNumber(cleanPhone)
                     .firstname(firstname != null ? firstname : "Client")
                     .lastname(lastname != null ? lastname : "Fidelity");
 
