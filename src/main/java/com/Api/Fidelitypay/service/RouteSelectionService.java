@@ -65,11 +65,9 @@ public class RouteSelectionService {
      * et retourne une seule route par provider (pour éviter d'essayer 2 fois le même agrégateur).
      */
     public List<Route> getSortedRoutes(String operator, String targetCountry) {
-        // 1. Récupérer TOUTES les routes disponibles sans se soucier de l'opérateur
-        List<Route> allRoutes = routeRepository.findByAvailabilityTrue();
-
-        // 2. Trier ces routes par notre système de score (qui valorise le pays et l'opérateur s'il correspond)
-        List<Route> sortedRoutes = allRoutes.stream()
+        // 1. Récupérer UNIQUEMENT les routes qui correspondent à l'opérateur ET au pays
+        List<Route> sortedRoutes = routeRepository.findByAvailabilityTrue().stream()
+                .filter(r -> r.getOperator() != null && r.getOperator().equalsIgnoreCase(operator))
                 .filter(r -> r.getCountry() == null || r.getCountry().isEmpty() || r.getCountry().equalsIgnoreCase(targetCountry))
                 .sorted(Comparator.comparingDouble(r -> calculateScore(r, targetCountry, operator)))
                 .toList();

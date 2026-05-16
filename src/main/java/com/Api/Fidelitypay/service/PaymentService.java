@@ -113,6 +113,7 @@ public class PaymentService {
         boolean success = false;
         int attempt = 0;
         String primaryProvider = providersToTry.get(0);
+        boolean fallbackNeededButUnavailable = false;  // ✅ FIX: Track if fallback was needed but no providers left
 
         // 3. Boucle de fallback (essaye chaque provider)
         for (String providerName : providersToTry) {
@@ -154,13 +155,16 @@ public class PaymentService {
                 break;
             }
 
+            // ✅ FIX: Mark if fallback was needed but no more providers available
+            if (attempt >= providersToTry.size()) {
+                log.error("❌ All providers failed for operator {}. No fallback available.", operator);
+                fallbackNeededButUnavailable = true;
+            } else {
+                log.info("🔄 Technical error detected, trying next provider...");
+            }
+
             finalResult = result;
             finalProviderUsed = providerName;
-            if (attempt >= providersToTry.size()) {
-                log.error("❌ All providers failed for operator {}", operator);
-            } else {
-                log.info("🔄 Technical error, trying next provider...");
-            }
         }
 
         // 4. Finaliser le paiement
@@ -170,6 +174,14 @@ public class PaymentService {
             payment.setStatus(PaymentStatus.FAILED);
         }
         payment.setUpdatedAt(LocalDateTime.now());
+        
+        // ✅ FIX: Set attemptCount for all outcomes (was only set on success)
+        payment.setAttemptCount(attempt);
+        
+        // ✅ FIX: Set fallbackReason when fallback was needed but unavailable
+        if (!success && fallbackNeededButUnavailable && payment.getFallbackReason() == null) {
+            payment.setFallbackReason("NO_FALLBACK_PROVIDER_AVAILABLE");
+        }
 
         if (finalProviderUsed != null) {
             payment.setRouteName(finalProviderUsed);
