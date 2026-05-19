@@ -16,6 +16,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByPaymentId(String paymentId);
 
+    Optional<Payment> findByApiKeyIdAndIdempotencyKey(String apiKeyId, String idempotencyKey);
+
     @Query("SELECT p FROM Payment p WHERE p.user.id = :userId ORDER BY p.createdAt DESC")
     List<Payment> findByUserId(@Param("userId") String userId);
 

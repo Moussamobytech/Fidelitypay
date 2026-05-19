@@ -101,9 +101,4 @@ public class ApiKey {
     @Column
     private LocalDateTime expiresAt;
 
-    /**
-     * Additional metadata or notes about the key
-     */
-    @Column(columnDefinition = "TEXT")
-    private String metadata;
 }

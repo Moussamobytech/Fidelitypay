@@ -25,9 +25,4 @@ public class CreateApiKeyRequest {
     @Pattern(regexp = "sandbox|live", message = "Environment must be 'sandbox' or 'live'")
     private String environment;
 
-    /**
-     * Optional metadata/notes about the key
-     */
-    @Size(max = 500, message = "Metadata must not exceed 500 characters")
-    private String metadata;
 }

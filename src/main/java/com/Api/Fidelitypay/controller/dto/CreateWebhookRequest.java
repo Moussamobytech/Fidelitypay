@@ -23,7 +23,7 @@ public class CreateWebhookRequest {
     private String url;
 
     @NotBlank(message = "Event is required")
-    @Pattern(regexp = "payment\\.(success|failed|pending|refunded)|.*", message = "Invalid event type")
+    @Pattern(regexp = "payment\\.(success|failed|pending|cancelled|requires_action|reconciliation|refunded)|.*", message = "Invalid event type")
     private String event;
 
     @Size(max = 255, message = "Description must not exceed 255 characters")

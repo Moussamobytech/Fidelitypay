@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS api_keys (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NULL,
-    metadata TEXT,
     
     INDEX idx_api_key_user_id (user_id),
     INDEX idx_api_key_public_key (public_key),
@@ -49,7 +48,6 @@ CREATE TABLE IF NOT EXISTS api_request_logs (
     latency_ms BIGINT NOT NULL,
     error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    metadata TEXT,
     
     INDEX idx_api_log_api_key_id (api_key_id),
     INDEX idx_api_log_user_id (user_id),
@@ -81,58 +79,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
     INDEX idx_webhook_event (event),
     INDEX idx_webhook_active (is_active)
 );
-
--- =============================================================================
--- SAMPLE DATA (For Testing - Remove in Production)
--- =============================================================================
-
--- Sample API Key for testing (password: sk_sandbox_test123456)
--- Note: This is a BCrypt hash - in real usage, use the API to create keys
-INSERT INTO api_keys (id, user_id, name, public_key, secret_key_hash, secret_key_hint, environment, is_active, created_at)
-VALUES (
-    '550e8400-e29b-41d4-a716-446655440000',
-    'demo-user',
-    'Test Sandbox Key',
-    'pk_sandbox_test123abc',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LeWWY21s0e0e0e0e',
-    '1234',
-    'sandbox',
-    TRUE,
-    NOW()
-) ON DUPLICATE KEY UPDATE name=name;
-
--- Sample API Request Logs
-INSERT INTO api_request_logs (api_key_id, user_id, method, endpoint, status_code, status, ip_address, latency_ms, created_at)
-VALUES 
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 200, 'SUCCESS', '192.168.1.1', 245, DATE_SUB(NOW(), INTERVAL 1 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/payments/status', 200, 'SUCCESS', '192.168.1.1', 123, DATE_SUB(NOW(), INTERVAL 2 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 500, 'ERROR', '192.168.1.2', 1234, DATE_SUB(NOW(), INTERVAL 3 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/refund', 200, 'SUCCESS', '192.168.1.1', 456, DATE_SUB(NOW(), INTERVAL 4 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/payments/list', 200, 'SUCCESS', '192.168.1.1', 189, DATE_SUB(NOW(), INTERVAL 5 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 400, 'VALIDATION_ERROR', '192.168.1.3', 67, DATE_SUB(NOW(), INTERVAL 6 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 200, 'SUCCESS', '192.168.1.1', 278, DATE_SUB(NOW(), INTERVAL 7 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/payments/status', 404, 'ERROR', '192.168.1.1', 98, DATE_SUB(NOW(), INTERVAL 8 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 200, 'SUCCESS', '192.168.1.1', 312, DATE_SUB(NOW(), INTERVAL 10 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/developer/metrics', 200, 'SUCCESS', '192.168.1.1', 45, DATE_SUB(NOW(), INTERVAL 12 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 200, 'SUCCESS', '192.168.1.1', 234, DATE_SUB(NOW(), INTERVAL 15 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/payments/status', 200, 'SUCCESS', '192.168.1.1', 156, DATE_SUB(NOW(), INTERVAL 18 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 503, 'TIMEOUT', '192.168.1.1', 5000, DATE_SUB(NOW(), INTERVAL 20 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'POST', '/api/v1/payments/initiate', 200, 'SUCCESS', '192.168.1.1', 267, DATE_SUB(NOW(), INTERVAL 22 HOUR)),
-    ('550e8400-e29b-41d4-a716-446655440000', 'demo-user', 'GET', '/api/v1/developer/activity', 200, 'SUCCESS', '192.168.1.1', 89, DATE_SUB(NOW(), INTERVAL 23 HOUR))
-ON DUPLICATE KEY UPDATE method=method;
-
--- Sample Webhook
-INSERT INTO webhooks (id, user_id, url, event, description, secret, is_active, created_at)
-VALUES (
-    '770e8400-e29b-41d4-a716-446655440000',
-    'demo-user',
-    'https://example.com/webhooks/payments',
-    'payment.success',
-    'Production payment success notifications',
-    'whsec_test123abc',
-    TRUE,
-    NOW()
-) ON DUPLICATE KEY UPDATE url=url;
 
 -- =============================================================================
 -- CLEANUP QUERIES (Optional - for maintenance)

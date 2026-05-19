@@ -103,7 +103,6 @@ public class ApiKeyService {
                 .secretKeyHint(secretKeyHint)
                 .environment(request.getEnvironment())
                 .isActive(true)
-                .metadata(request.getMetadata())
                 .build();
 
         ApiKey savedKey = apiKeyRepository.save(apiKey);
@@ -180,7 +179,6 @@ public class ApiKeyService {
             CreateApiKeyRequest sandboxRequest = CreateApiKeyRequest.builder()
                     .name("Rotated Sandbox Key")
                     .environment("sandbox")
-                    .metadata("Auto-generated during key rotation")
                     .build();
             newKeys.add(createApiKey(userId, sandboxRequest));
         }
@@ -189,7 +187,6 @@ public class ApiKeyService {
             CreateApiKeyRequest liveRequest = CreateApiKeyRequest.builder()
                     .name("Rotated Live Key")
                     .environment("live")
-                    .metadata("Auto-generated during key rotation")
                     .build();
             newKeys.add(createApiKey(userId, liveRequest));
         }
@@ -204,6 +201,15 @@ public class ApiKeyService {
         return apiKeyRepository.findByPublicKeyAndIsActive(publicKey, true)
                 .map(apiKey -> passwordEncoder.matches(secretKey, apiKey.getSecretKeyHash()))
                 .orElse(false);
+    }
+
+    public java.util.Optional<ApiKey> authenticateApiKey(String publicKey, String secretKey) {
+        if (publicKey == null || publicKey.isBlank() || secretKey == null || secretKey.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return apiKeyRepository.findByPublicKeyAndIsActive(publicKey.trim(), true)
+                .filter(apiKey -> apiKey.getExpiresAt() == null || apiKey.getExpiresAt().isAfter(LocalDateTime.now()))
+                .filter(apiKey -> passwordEncoder.matches(secretKey.trim(), apiKey.getSecretKeyHash()));
     }
 
     /**
@@ -262,7 +268,6 @@ public class ApiKeyService {
                 .lastUsedAt(apiKey.getLastUsedAt())
                 .lastUsedIp(apiKey.getLastUsedIp())
                 .expiresAt(apiKey.getExpiresAt())
-                .metadata(apiKey.getMetadata())
                 // userFullName is usually set by the calling method if needed for admin
                 .build();
     }

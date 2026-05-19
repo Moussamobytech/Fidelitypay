@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.util.Optional;
+
 @SuppressWarnings("null")
 class PaymentServiceTest {
 
@@ -59,18 +61,20 @@ class PaymentServiceTest {
                 when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
                 User user = new User();
-                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "22961000000", "John", "Doe",
+                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "61000000", "John", "Doe",
                                 "john@example.com");
 
                 assertNotNull(res);
-                assertEquals(PaymentStatus.SUCCESS, res.getStatus());
+                assertEquals(PaymentStatus.PENDING, res.getStatus());
                 assertEquals("KKIAPAY", res.getProvider());
+                assertEquals("kkiapay-123", res.getProviderPaymentId());
                 assertFalse(res.isUsedFallback());
                 verify(paymentRepository, atLeastOnce()).save(any());
+                verify(webhookService, never()).sendWebhook(any(Payment.class));
         }
 
         @Test
-        void initiatePayment_kkiapayFailsThenPaydunjaSuccess() {
+        void initiatePayment_kkiapayFailsThenPaydunyaSuccess_keepsPaymentPendingUntilCallback() {
                 // KKIAPAY échoue (erreur technique)
                 PaymentResult kkiapayResult = new PaymentResult(false);
                 kkiapayResult.setRawResponse("TIMEOUT: Connection failed");
@@ -90,13 +94,15 @@ class PaymentServiceTest {
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
                 User user = new User();
-                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "22961000000", "John", "Doe",
+                Payment res = paymentService.initiatePayment(user, 100.0, "BJ", "MTN", "61000000", "John", "Doe",
                                 "john@example.com");
 
                 assertNotNull(res);
-                assertEquals(PaymentStatus.SUCCESS, res.getStatus());
+                assertEquals(PaymentStatus.PENDING, res.getStatus());
                 assertEquals("PAYDUNYA", res.getProvider());
+                assertEquals("paydunya-success-456", res.getProviderPaymentId());
                 assertTrue(res.isUsedFallback());
+                verify(webhookService, never()).sendWebhook(any(Payment.class));
 
                 verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
                                 anyString(), anyString());
@@ -118,12 +124,67 @@ class PaymentServiceTest {
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
                 User user = new User();
-                Payment res = paymentService.initiatePayment(user, 500.0, "BJ", "MTN", "22961000000", "Jane", "Smith",
+                Payment res = paymentService.initiatePayment(user, 500.0, "BJ", "MTN", "61000000", "Jane", "Smith",
                                 "jane@example.com");
 
                 assertNotNull(res);
                 assertEquals(PaymentStatus.FAILED, res.getStatus());
                 assertNotNull(res.getFailureReason());
                 verify(paymentRepository, atLeastOnce()).save(any(Payment.class));
+                verify(webhookService).sendWebhook(any(Payment.class));
+        }
+
+        @Test
+        void processKkiapayCallback_pendingPayment_marksSuccessAndSendsWebhook() {
+                Payment payment = new Payment();
+                payment.setStatus(PaymentStatus.PENDING);
+                payment.setProviderPaymentId("kkiapay-123");
+
+                when(paymentRepository.findByProviderPaymentId("kkiapay-123")).thenReturn(Optional.of(payment));
+                when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+                com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback =
+                                new com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO();
+                callback.setTransactionId("kkiapay-123");
+                callback.setPaymentSucces(true);
+
+                paymentService.processKkiapayCallback(callback);
+
+                assertEquals(PaymentStatus.SUCCESS, payment.getStatus());
+                assertNull(payment.getFailureReason());
+                verify(paymentRepository).save(payment);
+                verify(webhookService).sendWebhook(payment);
+        }
+
+        @Test
+        void processPayDunyaCallback_pendingPayment_marksFailedAndSendsWebhook() {
+                Payment payment = new Payment();
+                payment.setStatus(PaymentStatus.PENDING);
+                payment.setProviderPaymentId("paydunya-token");
+
+                when(paymentRepository.findByProviderPaymentId("paydunya-token")).thenReturn(Optional.of(payment));
+                when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+                paymentService.processPayDunyaCallback("paydunya-token", false);
+
+                assertEquals(PaymentStatus.FAILED, payment.getStatus());
+                assertEquals("PROVIDER_REPORTED_FAILURE", payment.getFailureReason());
+                verify(paymentRepository).save(payment);
+                verify(webhookService).sendWebhook(payment);
+        }
+
+        @Test
+        void processPayDunyaCallback_terminalPayment_doesNotOverwriteFinalStatus() {
+                Payment payment = new Payment();
+                payment.setStatus(PaymentStatus.SUCCESS);
+                payment.setProviderPaymentId("paydunya-token");
+
+                when(paymentRepository.findByProviderPaymentId("paydunya-token")).thenReturn(Optional.of(payment));
+
+                paymentService.processPayDunyaCallback("paydunya-token", false);
+
+                assertEquals(PaymentStatus.SUCCESS, payment.getStatus());
+                verify(paymentRepository, never()).save(any(Payment.class));
+                verify(webhookService, never()).sendWebhook(any(Payment.class));
         }
 }

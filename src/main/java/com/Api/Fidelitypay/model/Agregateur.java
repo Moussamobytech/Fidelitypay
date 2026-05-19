@@ -7,12 +7,20 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "agregateurs")
+@Table(name = "agregateurs", indexes = {
+        @Index(name = "idx_agregateur_owner_user_id", columnList = "owner_user_id"),
+        @Index(name = "idx_agregateur_enabled", columnList = "enabled")
+})
 public class Agregateur {
 
     @Id
@@ -37,6 +45,19 @@ public class Agregateur {
 
     @Column(nullable = true)
     private String nomOperateur;
+
+    @Column(name = "owner_user_id", length = 255)
+    private String ownerUserId;
+
+    @Column(nullable = false)
+    private boolean enabled = true;
+
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "agregateur", cascade = CascadeType.ALL, orphanRemoval = true)
     @com.fasterxml.jackson.annotation.JsonManagedReference

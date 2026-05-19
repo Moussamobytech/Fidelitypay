@@ -1,9 +1,12 @@
 package com.Api.Fidelitypay.integration;
 
 import com.Api.Fidelitypay.config.KkiapayProperties;
+import com.Api.Fidelitypay.enums.PaymentStatus;
+import com.Api.Fidelitypay.enums.PaymentFlowType;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayRequestDTO;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayResponseDTO;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.model.Payment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -17,10 +20,11 @@ import org.springframework.web.client.HttpClientErrorException;
 
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.Map;
 
 @Component
 @Slf4j
-public class KkiapayClient {
+public class KkiapayClient implements PayInProviderClient {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -29,6 +33,11 @@ public class KkiapayClient {
     public KkiapayClient(RestTemplate restTemplate, KkiapayProperties kkiapayProperties) {
         this.restTemplate = restTemplate;
         this.kkiapayProperties = kkiapayProperties;
+    }
+
+    @Override
+    public String getProviderName() {
+        return "KKIAPAY";
     }
 
     /** Kkiapay availability check */
@@ -51,38 +60,50 @@ public class KkiapayClient {
 
     public PaymentResult initiatePayment(double amount, String country, String operator, String phone, String firstname,
             String lastname, String email) {
+        return initiatePayIn(PayInProviderRequest.builder()
+                .amount((long) amount)
+                .country(country)
+                .operator(operator)
+                .phone(phone)
+                .firstname(firstname)
+                .lastname(lastname)
+                .email(email)
+                .callbackUrl(kkiapayProperties.getCallbackUrl())
+                .flowType("WAVE".equalsIgnoreCase(operator) ? PaymentFlowType.WAVE_REDIRECT : PaymentFlowType.MOBILE_MONEY_REQUEST)
+                .build());
+    }
+
+    @Override
+    public PaymentResult initiatePayIn(PayInProviderRequest request) {
         long start = System.nanoTime();
 
         try {
             // 🔐 Headers
-HttpHeaders headers = new HttpHeaders();
-headers.setContentType(MediaType.APPLICATION_JSON);
+	HttpHeaders headers = new HttpHeaders();
+	headers.setContentType(MediaType.APPLICATION_JSON);
 
-headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
-headers.set("x-private-key", kkiapayProperties.getApi().getPrivateKey());
-headers.set("x-secret-key", kkiapayProperties.getApi().getSecretKey());
-log.info("PUBLIC='{}'", kkiapayProperties.getApi().getPublicKey());
-log.info("PRIVATE='{}'", kkiapayProperties.getApi().getPrivateKey());
-log.info("SECRET='{}'", kkiapayProperties.getApi().getSecretKey());
-            boolean isWave = "WAVE".equalsIgnoreCase(operator);
+	headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+            boolean isWave = request.getFlowType() == PaymentFlowType.WAVE_REDIRECT;
             String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
 
             // 📦 Payload
             KkiapayRequestDTO.KkiapayRequestDTOBuilder payloadBuilder = KkiapayRequestDTO.builder()
-                    .amount((int) amount)
-                    .country(country)
-                    .callback(kkiapayProperties.getCallbackUrl())
-                    .reason("Payment via " + operator + " (" + country + ")");
+                    .amount((int) request.getAmount())
+                    .country(request.getCountry())
+                    .callback(resolveCallbackUrl(request))
+                    .stateData(Map.of("paymentId", request.getPaymentId() != null ? request.getPaymentId() : ""))
+                    .partnerId(request.getPaymentId())
+                    .reason("FidelityPay payment " + safe(request.getPaymentId()));
 
             if (isWave) {
-                payloadBuilder.email(email != null ? email : "customer@example.com")
-                        .name(firstname + " " + lastname)
-                        .success_url(kkiapayProperties.getCallbackUrl()) // Default to callback
-                        .error_url(kkiapayProperties.getCallbackUrl()); // Default to callback
+                payloadBuilder.email(request.getEmail())
+                        .name((safe(request.getFirstname()) + " " + safe(request.getLastname())).trim())
+                        .success_url(request.getReturnUrl() != null ? request.getReturnUrl() : resolveCallbackUrl(request))
+                        .error_url(request.getCancelUrl() != null ? request.getCancelUrl() : resolveCallbackUrl(request));
             } else {
-                payloadBuilder.phoneNumber(phone)
-                        .firstname(firstname)
-                        .lastname(lastname);
+                payloadBuilder.phoneNumber(request.getPhone())
+                        .firstname(request.getFirstname())
+                        .lastname(request.getLastname());
             }
 
             HttpEntity<KkiapayRequestDTO> entity = new HttpEntity<>(payloadBuilder.build(), headers);
@@ -114,6 +135,11 @@ log.info("SECRET='{}'", kkiapayProperties.getApi().getSecretKey());
             if (success && kkiapayResponse != null) {
                 result.setProviderId(kkiapayResponse.getTransactionId());
                 result.setPaymentUrl(isWave ? kkiapayResponse.getWave_launch_url() : kkiapayResponse.getUrl());
+                result.setProviderTransactionCreated(kkiapayResponse.getTransactionId() != null);
+                if (request.getFlowType() == PaymentFlowType.ORANGE_CI_OTP) {
+                    result.setRequiresAction(true);
+                    result.setNextActionType("SUBMIT_OTP");
+                }
 
                 log.info("Kkiapay SUCCESS | txId={} | timeMs={}",
                         kkiapayResponse.getTransactionId(), elapsedMs);
@@ -143,9 +169,66 @@ log.info("SECRET='{}'", kkiapayProperties.getApi().getSecretKey());
             result.setResponseTimeMs(elapsedMs);
             result.setRawResponse(e.getMessage());
             result.setErrorType(determineErrorType(e));
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
+                result.setProviderTransactionCreated(true);
+            }
 
             return result;
         }
+    }
+
+    @Override
+    public PaymentResult validateAction(Payment payment, String actionType, String value) {
+        if (!"SUBMIT_OTP".equalsIgnoreCase(actionType)) {
+            return PayInProviderClient.super.validateAction(payment, actionType, value);
+        }
+        long start = System.nanoTime();
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+            Map<String, Object> payload = Map.of(
+                    "transactionId", payment.getProviderPaymentId(),
+                    "otp", value,
+                    "country", payment.getCountry());
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    kkiapayProperties.getApi().getBaseUrl() + "/api/v1/payments/orange-ci/validate",
+                    new HttpEntity<>(payload, headers),
+                    String.class);
+            KkiapayResponseDTO body = response.getBody() != null
+                    ? objectMapper.readValue(response.getBody(), KkiapayResponseDTO.class)
+                    : null;
+            PaymentResult result = new PaymentResult(response.getStatusCode().is2xxSuccessful()
+                    && body != null
+                    && !"failed".equalsIgnoreCase(body.getStatus()));
+            result.setProviderTransactionCreated(true);
+            result.setProviderId(payment.getProviderPaymentId());
+            result.setRawResponse(response.getBody());
+            result.setResponseTimeMs((System.nanoTime() - start) / 1_000_000.0);
+            return result;
+        } catch (Exception e) {
+            PaymentResult result = new PaymentResult(false);
+            result.setProviderTransactionCreated(true);
+            result.setProviderId(payment.getProviderPaymentId());
+            result.setRawResponse(e.getMessage());
+            result.setErrorType(determineErrorType(e));
+            result.setResponseTimeMs((System.nanoTime() - start) / 1_000_000.0);
+            return result;
+        }
+    }
+
+    @Override
+    public PaymentStatus checkStatus(String providerPaymentId) {
+        KkiapayResponseDTO status = checkTransactionStatus(providerPaymentId);
+        if (status == null || status.getStatus() == null) {
+            return PaymentStatus.PENDING_RECONCILIATION;
+        }
+        return switch (status.getStatus().toUpperCase()) {
+            case "SUCCESS", "SUCCEEDED", "COMPLETED" -> PaymentStatus.SUCCESS;
+            case "FAILED" -> PaymentStatus.FAILED;
+            case "CANCELLED", "CANCELED" -> PaymentStatus.CANCELLED;
+            default -> PaymentStatus.PENDING;
+        };
     }
 
     private ErrorType determineErrorType(Exception e) {
@@ -188,5 +271,13 @@ log.info("SECRET='{}'", kkiapayProperties.getApi().getSecretKey());
             log.error("Error checking Kkiapay status for txId={}", transactionId, e);
             return null;
         }
+    }
+
+    private String resolveCallbackUrl(PayInProviderRequest request) {
+        return request.getCallbackUrl() != null ? request.getCallbackUrl() : kkiapayProperties.getCallbackUrl();
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

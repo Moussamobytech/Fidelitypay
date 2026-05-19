@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/admin/agregateurs")
@@ -48,4 +49,10 @@ public class AgregateurController {
         agregateurService.deleteAgregateur(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Agregateur> setAgregateurEnabled(@PathVariable Long id, @RequestBody Map<String, Boolean> payload) {
+        return ResponseEntity.ok(agregateurService.setAgregateurEnabled(id, payload.getOrDefault("enabled", true)));
+    }
+
 }

@@ -109,6 +109,7 @@ public class User implements UserDetails {
         PRODUCT_MANAGER,
         AUTRE,
         DEVELOPER,
+        OPERATOR,
         ADMIN
     }
 }

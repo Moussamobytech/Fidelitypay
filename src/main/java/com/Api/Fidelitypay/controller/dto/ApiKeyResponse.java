@@ -42,7 +42,6 @@ public class ApiKeyResponse {
     private String lastUsedIp;
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime expiresAt;
-    private String metadata;
     private String userFullName;
     private String userEmail;
 }

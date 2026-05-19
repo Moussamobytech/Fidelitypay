@@ -41,9 +41,8 @@ public class DeveloperController {
      */
     @GetMapping("/keys")
         public ResponseEntity<List<ApiKeyResponse>> getApiKeys(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @RequestParam(required = false) String environment) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("📋 Fetching API keys for user: {}", userId);
 
         List<ApiKeyResponse> keys = environment != null
@@ -60,9 +59,8 @@ public class DeveloperController {
      */
     @PostMapping("/keys")
     public ResponseEntity<ApiKeyResponse> createApiKey(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @Valid @RequestBody CreateApiKeyRequest request) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("🔑 Creating new API key for user: {} in {} environment", userId, request.getEnvironment());
 
         ApiKeyResponse response = apiKeyService.createApiKey(userId, request);
@@ -76,9 +74,8 @@ public class DeveloperController {
      */
     @PostMapping("/keys/{id}/revoke")
     public ResponseEntity<Map<String, String>> revokeApiKey(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @PathVariable String id) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("🔒 Revoking API key: {} for user: {}", id, userId);
 
         try {
@@ -98,9 +95,8 @@ public class DeveloperController {
      * ⚠️ This is a sensitive operation - use with caution!
      */
     @PostMapping("/keys/rotate")
-        public ResponseEntity<Map<String, Object>> rotateApiKeys(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId) {
-        String userId = resolveUserId(headerUserId);
+        public ResponseEntity<Map<String, Object>> rotateApiKeys() {
+        String userId = resolveUserId();
         log.warn("🔄 Rotating all API keys for user: {}", userId);
 
         List<ApiKeyResponse> newKeys = apiKeyService.rotateApiKeys(userId);
@@ -120,9 +116,8 @@ public class DeveloperController {
      */
     @GetMapping("/metrics")
     public ResponseEntity<DeveloperMetricsResponse> getMetrics(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @RequestParam(defaultValue = "last_24h") String period) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("📊 Fetching metrics for user: {} (period: {})", userId, period);
 
         DeveloperMetricsResponse metrics = metricsService.getMetrics(userId, period);
@@ -136,10 +131,9 @@ public class DeveloperController {
      */
     @GetMapping("/activity")
     public ResponseEntity<List<ApiActivityResponse>> getActivity(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(defaultValue = "all") String filter) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("📜 Fetching activity for user: {} (limit: {}, filter: {})", userId, limit, filter);
 
         // Validate limit
@@ -167,9 +161,8 @@ public class DeveloperController {
      */
     @GetMapping("/webhooks")
         public ResponseEntity<List<WebhookResponse>> getWebhooks(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @RequestParam(required = false) String event) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("🪝 Fetching webhooks for user: {}", userId);
 
         List<WebhookResponse> webhooks = event != null
@@ -185,9 +178,8 @@ public class DeveloperController {
      */
     @PostMapping("/webhooks")
     public ResponseEntity<WebhookResponse> createWebhook(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @Valid @RequestBody CreateWebhookRequest request) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("🪝 Creating webhook for user: {} - Event: {}", userId, request.getEvent());
 
         try {
@@ -204,10 +196,9 @@ public class DeveloperController {
      */
     @PatchMapping("/webhooks/{id}")
     public ResponseEntity<WebhookResponse> updateWebhook(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @PathVariable String id,
             @RequestBody Map<String, Boolean> body) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         boolean isActive = body.getOrDefault("isActive", true);
 
         log.info("🔄 Updating webhook {} for user: {} - Active: {}", id, userId, isActive);
@@ -226,9 +217,8 @@ public class DeveloperController {
      */
     @DeleteMapping("/webhooks/{id}")
     public ResponseEntity<Map<String, String>> deleteWebhook(
-            @RequestHeader(value = "X-User-Id", required = false, defaultValue = "") String headerUserId,
             @PathVariable String id) {
-        String userId = resolveUserId(headerUserId);
+        String userId = resolveUserId();
         log.info("🗑️ Deleting webhook {} for user: {}", id, userId);
 
         try {
@@ -241,13 +231,12 @@ public class DeveloperController {
         }
     }
 
-    // Helper: resolve user id from security context (JWT) or fallback to provided header
-    private String resolveUserId(String headerUserId) {
+    private String resolveUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof User u) {
             return u.getId();
         }
-        return (headerUserId != null && !headerUserId.isBlank()) ? headerUserId : "demo-user";
+        throw new org.springframework.security.access.AccessDeniedException("Authenticated user required");
     }
 
     // =============================================================================

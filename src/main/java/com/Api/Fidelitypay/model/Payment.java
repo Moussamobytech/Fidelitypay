@@ -17,6 +17,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -38,6 +39,9 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnore
@@ -46,6 +50,12 @@ public class Payment {
     @Column(nullable = false, unique = true, length = 50)
     private String paymentId;
 
+    @Column(length = 255)
+    private String idempotencyKey;
+
+    @Column(length = 255)
+    private String apiKeyId;
+
     /** Opérateur choisi par l'utilisateur (OM, Wave…) */
     @Column(nullable = false)
     private String operator;
@@ -53,6 +63,12 @@ public class Payment {
     /** Agrégateur réellement utilisé (SamirPay, PayDunya) */
     @Column
     private String provider;
+
+    @Column(length = 40)
+    private String flowType;
+
+    @Column(length = 100)
+    private String providerChannel;
 
     /** Route technique utilisée */
     @Column
@@ -93,6 +109,30 @@ public class Payment {
     private String providerResponse;
 
     private String paymentUrl;
+
+    @Column(length = 1000)
+    private String returnUrl;
+
+    @Column(length = 1000)
+    private String cancelUrl;
+
+    @Column(length = 1000)
+    private String callbackUrl;
+
+    @Column(length = 50)
+    private String customerPhone;
+
+    @Column(length = 120)
+    private String customerFirstname;
+
+    @Column(length = 120)
+    private String customerLastname;
+
+    @Column(length = 255)
+    private String customerEmail;
+
+    @Column(length = 80)
+    private String nextActionType;
 
     @Column(nullable = false)
     private boolean usedFallback = false;

@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 public class PaydunyaProperties {
     private Api api = new Api();
     private Store store = new Store();
+    private String callbackUrl;
 
     @Data
     public static class Api {

@@ -1,95 +1,148 @@
 # Documentation API FidelityPay
 
-Voici la liste des endpoints disponibles pour tester l'API sur Postman.
+Cette documentation couvre le pay-in marchand. Les endpoints dashboard/admin utilisent le JWT; les endpoints marchands de paiement utilisent les clés API.
 
-## 1. Initier un Paiement
-Cet endpoint permet de démarrer une transaction. Le système choisira automatiquement la meilleure route (Kkiapay, PayDunya, etc.) selon l'opérateur.
+## Authentification marchand
 
-*   **Méthode** : `POST`
-*   **URL** : `http://localhost:8080/api/payments/initiate`
-*   **Headers** :
-    *   `Content-Type`: `application/json`
+Chaque appel marchand doit envoyer:
 
-### Corps de la requête (Body JSON) :
-**Important** : Le champ `phone` est obligatoire pour identifier le payeur.
+- `X-API-Public-Key`: clé publique du marchand
+- `X-API-Secret-Key`: secret associé, affiché une seule fois à la création
+- `Idempotency-Key`: identifiant unique de la tentative côté marchand
+- `Content-Type: application/json`
+
+## Initier un paiement pay-in
+
+`POST /api/v1/payments/initiate`
+
+URL locale: `http://localhost:8060/api/v1/payments/initiate`
 
 ```json
 {
-    "amount": 500,
-    "country": "SN",
-    "operator": "WAVE",
-    "phone": "221776006060"
+  "amount": 5000,
+  "country": "SN",
+  "operator": "WAVE",
+  "customer": {
+    "phone": "221776006060",
+    "firstname": "Awa",
+    "lastname": "Diop",
+    "email": "awa@example.com"
+  },
+  "returnUrl": "https://merchant.example.com/success",
+  "cancelUrl": "https://merchant.example.com/cancel"
 }
 ```
 
-*   `amount` : Montant de la transaction (ex: 500).
-*   `country` : Code pays ISO (ex: "SN" pour Sénégal, "BJ" pour Bénin, "ML" pour Mali).
-*   `operator` : Nom de l'opérateur (ex: "WAVE", "OM" pour Orange Money, "MOOV").
-*   `phone` : Numéro de téléphone du client qui va payer.
+`amount` est un entier en XOF. Le routage est fait par correspondance exacte entre `direction=PAYIN`, `country`, `operator`, l'environnement de la clé API, et les routes de paiement actives.
 
----
+### Exemple curl
 
-## 2. Vérifier le Statut d'un Paiement
-Permet de suivre l'état d'un paiement grâce à son ID unique.
+```bash
+curl -X POST http://localhost:8060/api/v1/payments/initiate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Public-Key: pk_sandbox_xxx" \
+  -H "X-API-Secret-Key: sk_sandbox_xxx" \
+  -H "Idempotency-Key: order-123-init-1" \
+  -d '{
+    "amount": 5000,
+    "country": "SN",
+    "operator": "WAVE",
+    "customer": {
+      "phone": "221776006060",
+      "firstname": "Awa",
+      "lastname": "Diop"
+    },
+    "returnUrl": "https://merchant.example.com/success",
+    "cancelUrl": "https://merchant.example.com/cancel"
+  }'
+```
 
-*   **Méthode** : `GET`
-*   **URL** : `http://localhost:8080/api/payments/status/{paymentId}`
+### Réponse
 
-### Exemple :
-Si l'initialisation vous renvoie un ID comme `a1b2c3d4-0000...` :
-`http://localhost:8080/api/payments/status/a1b2c3d4-0000-0000-0000-000000000000`
+```json
+{
+  "paymentId": "FP-...",
+  "status": "PENDING",
+  "paymentUrl": "https://provider.example/checkout/...",
+  "provider": "KKIAPAY",
+  "operator": "WAVE",
+  "country": "SN",
+  "amount": 5000,
+  "currency": "XOF",
+  "nextAction": null,
+  "failureReason": null
+}
+```
 
----
+Pour Orange Money Côte d'Ivoire via Kkiapay, la réponse peut être:
 
-## 3. Lister les Options de Paiement
-Affiche les moyens de paiement disponibles pour un pays donné.
+```json
+{
+  "paymentId": "FP-...",
+  "status": "REQUIRES_ACTION",
+  "provider": "KKIAPAY",
+  "operator": "OM",
+  "country": "CI",
+  "amount": 5000,
+  "currency": "XOF",
+  "nextAction": {
+    "type": "SUBMIT_OTP",
+    "url": "/api/v1/payments/FP-.../actions/otp"
+  }
+}
+```
 
-*   **Méthode** : `GET`
-*   **URL** : `http://localhost:8080/api/payment-options?country=SN`
+## Valider une action OTP
 
-### Paramètres :
-*   `country` : Le code du pays (ex: `SN`, `BJ`).
+`POST /api/v1/payments/{paymentId}/actions/otp`
 
----
+Même authentification par clés API.
 
-## 4. Monitoring des Routes
-Permet de piloter et consulter l'état des routes de paiement.
+```json
+{
+  "otp": "123456"
+}
+```
 
-*   **Vérification manuelle** : `POST http://localhost:8080/api/monitoring/check` (Force un check de toutes les routes).
-*   **Liste des routes** : `GET http://localhost:8080/api/monitoring/routes` (Récupère l'état et la latence actuelle des routes).
-*   **Historique des logs** : `GET http://localhost:8080/api/monitoring/logs` (Récupère tout l'historique technique des transactions).
+## Vérifier le statut
 
----
+`GET /api/v1/payments/{paymentId}`
 
-## 5. Lister Tous les Paiements
-Récupère l'historique complet de tous les paiements enregistrés.
+Même authentification par clés API. Le paiement doit appartenir à la clé API utilisée.
 
-*   **Méthode** : `GET`
-*   **URL** : `http://localhost:8080/api/payments`
+## Statuts de paiement
 
----
+- `PENDING`: paiement initié, en attente de confirmation.
+- `REQUIRES_ACTION`: une action payeur est nécessaire.
+- `PENDING_RECONCILIATION`: le fournisseur a peut-être reçu la demande, mais Fidelity Pay attend une confirmation par callback ou status API.
+- `SUCCESS`: paiement réussi.
+- `FAILED`: paiement échoué ou refusé.
+- `CANCELLED`: paiement annulé avant finalisation.
 
-## Codes de Statut (Base de données)
-*   `PENDING` : Paiement initié, en attente de réponse ou de validation.
-*   `SUCCESS` : Paiement réussi.
-*   `FAILED` : Paiement échoué ou refusé.
+## Capacités pay-in Kkiapay
 
-## Informations fournies par FidelityPay après inscription
-* API KEY Sandbox (pour les tests)
+Matrice officielle pay-in actuellement supportée:
 
- * API KEY Production (pour l'environnement réel)
+- `BJ`: `MTN`, `MOOV`, `CELTIIS`
+- `CI`: `MTN`, `MOOV`, `OM`, `WAVE`
+- `TG`: `MOOV`, `MIXX`
+- `SN`: `OM`, `MIXX`, `WAVE`
+- `NE`: `AIRTEL`
 
-* Base URL Sandbox : https://sandbox-api.fidelitypay.com/v1
+Alias acceptés: `ORANGE`/`ORANGE_MONEY` vers `OM`, `FREE`/`FREEMONEY`/`MIXX BY YAS` vers `MIXX`.
 
-* Base URL Production : https://api.fidelitypay.com/v1
+## Callbacks et webhooks
 
+Les callbacks fournisseurs sont internes à Fidelity Pay:
 
-Vous etes
-Developpeur
-Entrepreneur/CEO
-Product Manager
-Autre
+- Kkiapay: `/api/payments/callback/kkiapay`
+- PayDunya: `/api/payments/callback/paydunya`
 
-Pays souhaites pour les paiments
-Tout
-liste pays
+Les marchands ne configurent pas ces URLs. Ils configurent plutôt des webhooks dashboard via `/api/v1/developer/webhooks`, puis Fidelity Pay envoie les événements:
+
+- `payment.success`
+- `payment.failed`
+- `payment.cancelled`
+- `payment.requires_action`
+
+Les notifications développeur sont signées avec `X-FidelityPay-Signature`.

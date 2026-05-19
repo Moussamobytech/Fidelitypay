@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 @Builder
 public class WebhookDTO {
     private String paymentId;
+    private String event;
     private PaymentStatus status;
     private BigDecimal amount;
     private String currency;

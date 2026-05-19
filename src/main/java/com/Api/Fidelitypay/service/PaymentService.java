@@ -163,8 +163,10 @@ public class PaymentService {
             }
         }
 
-        // 4. Finaliser le paiement
-        payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
+        // 4. Finaliser l'initialisation.
+        // Un succès fournisseur signifie seulement que le checkout/transaction provider
+        // a été créé. Le paiement reste PENDING jusqu'au callback fournisseur final.
+        payment.setStatus(success ? PaymentStatus.PENDING : PaymentStatus.FAILED);
         payment.setUpdatedAt(LocalDateTime.now());
 
         if (finalProviderUsed != null) {
@@ -185,7 +187,9 @@ public class PaymentService {
             payment.setProviderResponseTimeMs((long) finalResult.getResponseTimeMs());
             payment.setErrorType(finalResult.getErrorType());
 
-            if (!success) {
+            if (success) {
+                payment.setFailureReason(null);
+            } else {
                 payment.setFailureReason(
                         determineFailureReason(finalResult.getRawResponse(), finalResult.getErrorType()));
             }
@@ -196,7 +200,9 @@ public class PaymentService {
         saveLog(paymentId, finalProviderUsed, finalResult, success, payment.getFailureReason(),
                 payment.getErrorType(), payment.isUsedFallback(), payment.getFallbackReason(), primaryProvider);
 
-        webhookService.sendWebhook(payment);
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            webhookService.sendWebhook(payment);
+        }
 
         return payment;
     }
@@ -403,14 +409,18 @@ public class PaymentService {
 
     private void updatePaymentStatusFromProvider(String providerId, boolean success) {
         paymentRepository.findByProviderPaymentId(providerId).ifPresent(payment -> {
-            boolean wasPending = payment.getStatus() == PaymentStatus.PENDING;
+            if (payment.getStatus() != PaymentStatus.PENDING) {
+                log.info("Ignoring callback for providerId={} because payment {} is already {}",
+                        providerId, payment.getPaymentId(), payment.getStatus());
+                return;
+            }
+
             payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
+            payment.setFailureReason(success ? null : "PROVIDER_REPORTED_FAILURE");
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
 
-            if (wasPending && (payment.getStatus() == PaymentStatus.SUCCESS || payment.getStatus() == PaymentStatus.FAILED)) {
-                webhookService.sendWebhook(payment);
-            }
+            webhookService.sendWebhook(payment);
         });
     }
 }

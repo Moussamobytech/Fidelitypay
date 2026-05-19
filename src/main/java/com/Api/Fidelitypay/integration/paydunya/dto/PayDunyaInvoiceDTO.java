@@ -16,4 +16,12 @@ public class PayDunyaInvoiceDTO {
     private String description;
     
     private java.util.List<String> channels;
+
+    private PayDunyaCustomerDTO customer;
+
+    public PayDunyaInvoiceDTO(double totalAmount, String description, java.util.List<String> channels) {
+        this.totalAmount = totalAmount;
+        this.description = description;
+        this.channels = channels;
+    }
 }

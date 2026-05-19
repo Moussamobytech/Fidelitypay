@@ -3,6 +3,7 @@ package com.Api.Fidelitypay.controller;
 import com.Api.Fidelitypay.controller.dto.PaymentInitiateRequest;
 import com.Api.Fidelitypay.controller.dto.PaymentResponseDTO;
 import com.Api.Fidelitypay.model.Payment;
+import com.Api.Fidelitypay.service.MerchantPayInService;
 import com.Api.Fidelitypay.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final MerchantPayInService merchantPayInService;
 
     /**
      * Liste des moyens de paiement disponibles par pays
@@ -123,8 +125,7 @@ public class PaymentController {
     @PostMapping("/payments/callback/kkiapay")
     public ResponseEntity<Void> kkiapayCallback(
             @RequestBody com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback) {
-        // En production, il conviendrait de vérifier la signature avec le SecretKey ici
-        paymentService.processKkiapayCallback(callback);
+        merchantPayInService.processKkiapayCallback(callback);
         return ResponseEntity.ok().build();
     }
 
@@ -134,10 +135,11 @@ public class PaymentController {
     @PostMapping("/payments/callback/paydunya")
     public ResponseEntity<Void> paydunyaCallback(
             @RequestParam("token") String token,
-            @RequestParam("data[status]") String status) {
+            @RequestParam("data[status]") String status,
+            @RequestParam(value = "data[hash]", required = false) String hash,
+            @RequestParam(value = "hash", required = false) String rootHash) {
 
-        boolean success = "completed".equalsIgnoreCase(status);
-        paymentService.processPayDunyaCallback(token, success);
+        merchantPayInService.processPayDunyaCallback(token, status, hash != null ? hash : rootHash);
         return ResponseEntity.ok().build();
     }
 }

@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.lang.Nullable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -33,16 +35,18 @@ public class ApiRequestInterceptor implements HandlerInterceptor {
         // Record start time for latency calculation
         request.setAttribute(START_TIME_ATTR, System.currentTimeMillis());
 
-        // Extract user ID from header (in production, get from JWT or session)
-        String userId = request.getHeader("X-User-Id");
+        String userId = authenticatedUserId();
         if (userId != null) {
             request.setAttribute(USER_ID_ATTR, userId);
         }
 
-        // Extract API key from header for tracking
-        String apiKey = request.getHeader("X-API-Key");
-        if (apiKey != null) {
-            request.setAttribute(API_KEY_ID_ATTR, apiKey);
+        String publicKey = request.getHeader("X-API-Public-Key");
+        if (publicKey != null) {
+            apiKeyService.authenticateApiKey(publicKey, request.getHeader("X-API-Secret-Key"))
+                    .ifPresent(apiKey -> {
+                        request.setAttribute(API_KEY_ID_ATTR, apiKey.getId());
+                        request.setAttribute(USER_ID_ATTR, apiKey.getUserId());
+                    });
         }
 
         return true;
@@ -60,9 +64,6 @@ public class ApiRequestInterceptor implements HandlerInterceptor {
 
             // Get user ID
             String userId = (String) request.getAttribute(USER_ID_ATTR);
-            if (userId == null) {
-                userId = request.getHeader("X-User-Id");
-            }
 
             // Only log if we have a user ID
             if (userId == null) {
@@ -164,5 +165,13 @@ public class ApiRequestInterceptor implements HandlerInterceptor {
         }
 
         return request.getRemoteAddr();
+    }
+
+    private String authenticatedUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.Api.Fidelitypay.model.User user) {
+            return user.getId();
+        }
+        return null;
     }
 }

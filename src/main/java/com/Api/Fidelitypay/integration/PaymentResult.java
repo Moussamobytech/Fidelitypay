@@ -14,6 +14,9 @@ public class PaymentResult {
     private String rawResponse;
     private double responseTimeMs;
     private ErrorType errorType;
+    private boolean providerTransactionCreated;
+    private boolean requiresAction;
+    private String nextActionType;
 
     public PaymentResult() {
         this.success = true;
@@ -29,6 +32,30 @@ public class PaymentResult {
 
     public void setErrorType(ErrorType errorType) {
         this.errorType = errorType;
+    }
+
+    public boolean isProviderTransactionCreated() {
+        return providerTransactionCreated;
+    }
+
+    public void setProviderTransactionCreated(boolean providerTransactionCreated) {
+        this.providerTransactionCreated = providerTransactionCreated;
+    }
+
+    public boolean isRequiresAction() {
+        return requiresAction;
+    }
+
+    public void setRequiresAction(boolean requiresAction) {
+        this.requiresAction = requiresAction;
+    }
+
+    public String getNextActionType() {
+        return nextActionType;
+    }
+
+    public void setNextActionType(String nextActionType) {
+        this.nextActionType = nextActionType;
     }
 
     public boolean isSuccess() {
