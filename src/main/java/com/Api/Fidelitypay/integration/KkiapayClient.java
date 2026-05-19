@@ -5,6 +5,7 @@ package com.Api.Fidelitypay.integration;
 import com.Api.Fidelitypay.config.KkiapayProperties;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayRequestDTO;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayResponseDTO;
+import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayWaveRequestDTO;
 import com.Api.Fidelitypay.model.Agregateur;
 import com.Api.Fidelitypay.enums.ErrorType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -84,9 +85,7 @@ public class KkiapayClient {
             log.info("Kkiapay Attempt | URL: {} | Public: {}...", baseUrl, mask(publicKey));
 
             boolean isWave = "WAVE".equalsIgnoreCase(operator);
-            // On unifie l'URL car l'endpoint /partner/wave semble exiger un token widget.
-            // L'endpoint /request est plus flexible pour le débit direct.
-            String endpoint = "/api/v1/payments/request";
+            String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
 
             // 🔀 Operator Normalization
             String kkiapayOperator = operator != null ? operator.toLowerCase() : "";
@@ -95,29 +94,39 @@ public class KkiapayClient {
             else if (kkiapayOperator.contains("orange")) kkiapayOperator = "orange";
             else if (kkiapayOperator.contains("wave")) kkiapayOperator = "wave";
 
-            // 📦 Payload following strict documentation
-            KkiapayRequestDTO.KkiapayRequestDTOBuilder payloadBuilder = KkiapayRequestDTO.builder()
-                    .amount(amount)
-                    .phoneNumber(formatPhoneNumber(phone, country))
-                    .country(country)
-                    .firstname(firstname != null && !firstname.isEmpty() ? firstname : "Client")
-                    .lastname(lastname != null && !lastname.isEmpty() ? lastname : "Fidelity")
-                    .callback(kkiapayProperties.getCallbackUrl())
-                    .reason("Payment via " + operator + " (" + country + ")")
-                    .email(email != null && !email.isEmpty() ? email : "customer@example.com")
-                    .name((firstname != null ? firstname : "Client") + " " + (lastname != null ? lastname : "Fidelity"))
-                    .operator(kkiapayOperator)
-                    .payment_method(kkiapayOperator);
-
+            Object payload;
             if (isWave) {
-                payloadBuilder.success_url(kkiapayProperties.getCallbackUrl())
-                              .error_url(kkiapayProperties.getCallbackUrl());
+                // Wave specific payload
+                KkiapayWaveRequestDTO wavePayload = new KkiapayWaveRequestDTO();
+                wavePayload.setAmount(amount);
+                wavePayload.setEmail(email != null && !email.isEmpty() ? email : "customer@example.com");
+                wavePayload.setCountry(country != null ? country.toUpperCase() : "SN");
+                wavePayload.setName((firstname != null ? firstname : "Client") + " " + (lastname != null ? lastname : "Fidelity"));
+                wavePayload.setCallback(kkiapayProperties.getCallbackUrl());
+                wavePayload.setReason("Payment via " + operator + " (" + country + ")");
+                wavePayload.setSuccess_url(kkiapayProperties.getCallbackUrl());
+                wavePayload.setError_url(kkiapayProperties.getCallbackUrl());
+                payload = wavePayload;
+            } else {
+                // Standard Mobile Money payload
+                payload = KkiapayRequestDTO.builder()
+                        .amount(amount)
+                        .phoneNumber(formatPhoneNumber(phone, country))
+                        .country(country)
+                        .firstname(firstname != null && !firstname.isEmpty() ? firstname : "Client")
+                        .lastname(lastname != null && !lastname.isEmpty() ? lastname : "Fidelity")
+                        .callback(kkiapayProperties.getCallbackUrl())
+                        .reason("Payment via " + operator + " (" + country + ")")
+                        .email(email != null && !email.isEmpty() ? email : "customer@example.com")
+                        .name((firstname != null ? firstname : "Client") + " " + (lastname != null ? lastname : "Fidelity"))
+                        .operator(kkiapayOperator)
+                        .payment_method(kkiapayOperator)
+                        .build();
             }
 
-            KkiapayRequestDTO payload = payloadBuilder.build();
             log.info("Kkiapay Final Payload: {}", objectMapper.writeValueAsString(payload));
 
-            HttpEntity<KkiapayRequestDTO> entity = new HttpEntity<>(payload, headers);
+            HttpEntity<Object> entity = new HttpEntity<>(payload, headers);
 
             // 📡 Call API
             ResponseEntity<String> response = restTemplate.postForEntity(
@@ -148,7 +157,7 @@ public class KkiapayClient {
             PaymentResult result = new PaymentResult(false);
             result.setResponseTimeMs(elapsedMs);
             result.setRawResponse(e.getMessage());
-            result.setErrorType(ErrorType.UNKNOWN);
+            result.setErrorType(ErrorType.INTERNAL_ERROR);
             return result;
         }
     }

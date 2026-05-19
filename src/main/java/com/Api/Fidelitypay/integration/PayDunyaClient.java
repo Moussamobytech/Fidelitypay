@@ -156,7 +156,7 @@ public class PayDunyaClient {
             } else if (e.getMessage() != null && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
                 result.setErrorType(ErrorType.PROVIDER_DOWN);
             } else {
-                result.setErrorType(ErrorType.UNKNOWN);
+                result.setErrorType(ErrorType.INTERNAL_ERROR);
             }
 
             return result;
