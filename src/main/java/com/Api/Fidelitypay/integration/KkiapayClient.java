@@ -84,7 +84,6 @@ public class KkiapayClient implements PayInProviderClient {
         long start = System.nanoTime();
 
         try {
-<<<<<<< HEAD
             // 🔐 Headers
 	HttpHeaders headers = new HttpHeaders();
 	headers.setContentType(MediaType.APPLICATION_JSON);
@@ -101,45 +100,9 @@ public class KkiapayClient implements PayInProviderClient {
                     .stateData(Map.of("paymentId", request.getPaymentId() != null ? request.getPaymentId() : ""))
                     .partnerId(request.getPaymentId())
                     .reason("FidelityPay payment " + safe(request.getPaymentId()));
-=======
-            // 🔐 STRICT DASHBOARD CONFIGURATION ONLY
-            Agregateur dbConfig = agregateurRepository.findByNomAIgnoreCase("KKIAPAY")
-                    .orElseThrow(() -> new RuntimeException("KKIAPAY is not configured in the dashboard. Please add it first."));
-
-            String publicKey = dbConfig.getCleApblic();
-            String privateKey = dbConfig.getCleApr();
-            String baseUrl = dbConfig.getBaseUrl();
-
-            if (publicKey == null || privateKey == null) {
-                throw new RuntimeException("KKIAPAY Public or Private keys are missing in the dashboard configuration.");
-            }
-
-            // Fallback to default base URL only if not specified in dashboard
-            if (baseUrl == null || baseUrl.isEmpty()) {
-                baseUrl = "https://api.kkiapay.me";
-            }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-api-key", publicKey);
-            headers.set("x-private-key", privateKey);
-
-            log.info("Kkiapay Attempt | URL: {} | Public: {}...", baseUrl, mask(publicKey));
-
-            boolean isWave = "WAVE".equalsIgnoreCase(operator);
-            String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
-
-            // 🔀 Operator Normalization
-            String kkiapayOperator = operator != null ? operator.toLowerCase() : "";
-            if (kkiapayOperator.contains("mtn")) kkiapayOperator = "momo";
-            else if (kkiapayOperator.contains("moov")) kkiapayOperator = "moov";
-            else if (kkiapayOperator.contains("orange")) kkiapayOperator = "orange";
-            else if (kkiapayOperator.contains("wave")) kkiapayOperator = "wave";
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
 
             Object payload;
             if (isWave) {
-<<<<<<< HEAD
                 payloadBuilder.email(request.getEmail())
                         .name((safe(request.getFirstname()) + " " + safe(request.getLastname())).trim())
                         .success_url(request.getReturnUrl() != null ? request.getReturnUrl() : resolveCallbackUrl(request))
@@ -148,34 +111,6 @@ public class KkiapayClient implements PayInProviderClient {
                 payloadBuilder.phoneNumber(request.getPhone())
                         .firstname(request.getFirstname())
                         .lastname(request.getLastname());
-=======
-                // Wave specific payload
-                KkiapayWaveRequestDTO wavePayload = new KkiapayWaveRequestDTO();
-                wavePayload.setAmount(amount);
-                wavePayload.setEmail(email != null && !email.isEmpty() ? email : "customer@example.com");
-                wavePayload.setCountry(country != null ? country.toUpperCase() : "SN");
-                wavePayload.setName((firstname != null ? firstname : "Client") + " " + (lastname != null ? lastname : "Fidelity"));
-                wavePayload.setCallback(kkiapayProperties.getCallbackUrl());
-                wavePayload.setReason("Payment via " + operator + " (" + country + ")");
-                wavePayload.setSuccess_url(kkiapayProperties.getCallbackUrl());
-                wavePayload.setError_url(kkiapayProperties.getCallbackUrl());
-                payload = wavePayload;
-            } else {
-                // Standard Mobile Money payload
-                payload = KkiapayRequestDTO.builder()
-                        .amount(amount)
-                        .phoneNumber(formatPhoneNumber(phone, country))
-                        .country(country)
-                        .firstname(firstname != null && !firstname.isEmpty() ? firstname : "Client")
-                        .lastname(lastname != null && !lastname.isEmpty() ? lastname : "Fidelity")
-                        .callback(kkiapayProperties.getCallbackUrl())
-                        .reason("Payment via " + operator + " (" + country + ")")
-                        .email(email != null && !email.isEmpty() ? email : "customer@example.com")
-                        .name((firstname != null ? firstname : "Client") + " " + (lastname != null ? lastname : "Fidelity"))
-                        .operator(kkiapayOperator)
-                        .payment_method(kkiapayOperator)
-                        .build();
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
             }
 
             log.info("Kkiapay Final Payload: {}", objectMapper.writeValueAsString(payload));
@@ -192,7 +127,6 @@ public class KkiapayClient implements PayInProviderClient {
             PaymentResult result = new PaymentResult();
             result.setRawResponse(response.getBody());
             result.setResponseTimeMs(elapsedMs);
-<<<<<<< HEAD
 
             // 🧠 Parse JSON
             String body = response.getBody();
@@ -233,11 +167,6 @@ public class KkiapayClient implements PayInProviderClient {
                 }
             }
 
-=======
-            result.setSuccess(true);
-            
-            log.info("Kkiapay SUCCESS | body={}", response.getBody());
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
             return result;
 
         } catch (HttpStatusCodeException e) {
@@ -254,20 +183,15 @@ public class KkiapayClient implements PayInProviderClient {
             PaymentResult result = new PaymentResult(false);
             result.setResponseTimeMs(elapsedMs);
             result.setRawResponse(e.getMessage());
-<<<<<<< HEAD
             result.setErrorType(determineErrorType(e));
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
                 result.setProviderTransactionCreated(true);
             }
 
-=======
-            result.setErrorType(ErrorType.INTERNAL_ERROR);
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
             return result;
         }
     }
 
-<<<<<<< HEAD
     @Override
     public PaymentResult validateAction(Payment payment, String actionType, String value, ProviderCredentials credentials) {
         if (!"SUBMIT_OTP".equalsIgnoreCase(actionType)) {
@@ -320,24 +244,6 @@ public class KkiapayClient implements PayInProviderClient {
             case "CANCELLED", "CANCELED" -> PaymentStatus.CANCELLED;
             default -> PaymentStatus.PENDING;
         };
-=======
-    private String formatPhoneNumber(String phone, String country) {
-        if (phone == null || phone.isEmpty()) return "";
-        String cleanPhone = phone.replaceAll("[^0-9]", "");
-        
-        String prefix = "";
-        if ("BJ".equalsIgnoreCase(country)) prefix = "229";
-        else if ("CI".equalsIgnoreCase(country)) prefix = "225";
-        else if ("SN".equalsIgnoreCase(country)) prefix = "221";
-        else if ("TG".equalsIgnoreCase(country)) prefix = "228";
-        else if ("ML".equalsIgnoreCase(country)) prefix = "223";
-
-        if (!prefix.isEmpty() && !cleanPhone.startsWith(prefix)) {
-            if (cleanPhone.startsWith("0")) cleanPhone = cleanPhone.substring(1);
-            return prefix + cleanPhone;
-        }
-        return cleanPhone;
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
     }
 
     private ErrorType determineErrorType(Exception e) {
@@ -386,7 +292,6 @@ public class KkiapayClient implements PayInProviderClient {
         }
     }
 
-<<<<<<< HEAD
     // Temporary development bridge: if merchant credentials are missing, fall back to
     // application-level keys. Disable payment.providers.allow-global-credentials-fallback
     // outside local/dev and remove this fallback once merchant onboarding is complete.
@@ -404,10 +309,3 @@ public class KkiapayClient implements PayInProviderClient {
         return value == null ? "" : value;
     }
 }
-=======
-    private String mask(String key) {
-        if (key == null || key.length() < 8) return "****";
-        return key.substring(0, 4) + "...." + key.substring(key.length() - 4);
-    }
-}
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75

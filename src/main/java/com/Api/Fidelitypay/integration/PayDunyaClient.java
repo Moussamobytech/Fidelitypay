@@ -99,27 +99,17 @@ public class PayDunyaClient implements PayInProviderClient {
 
             // 🧐 Debug Log (Masked)
             log.info("PayDunya Attempt | URL: {} | MasterKey: {}... | PrivateKey: {}... | Token: {}...",
-<<<<<<< HEAD
                     paydunyaProperties.getApi().getBaseUrl(),
                     mask(resolveMasterKey(request.getCredentials())),
                     mask(resolvePrivateKey(request.getCredentials())),
                     mask(resolveToken(request.getCredentials())));
-=======
-                    baseUrl, mask(masterKey), mask(privateKey), mask(token));
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
 
             // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-<<<<<<< HEAD
             headers.set("PAYDUNYA-MASTER-KEY", resolveMasterKey(request.getCredentials()));
             headers.set("PAYDUNYA-PRIVATE-KEY", resolvePrivateKey(request.getCredentials()));
             headers.set("PAYDUNYA-TOKEN", resolveToken(request.getCredentials()));
-=======
-            headers.set("PAYDUNYA-MASTER-KEY", masterKey);
-            headers.set("PAYDUNYA-PRIVATE-KEY", privateKey);
-            headers.set("PAYDUNYA-TOKEN", token);
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
 
             // 📦 Payload
             PayDunyaInvoiceDTO invoiceDTO = new PayDunyaInvoiceDTO(
@@ -267,7 +257,6 @@ public class PayDunyaClient implements PayInProviderClient {
     private java.util.List<String> getPayDunyaChannels(String operator, String country) {
         if (operator == null || country == null) return java.util.List.of("unknown");
         
-<<<<<<< HEAD
         if ("SN".equals(c) || "SENEGAL".equals(c)) {
             if ("WAVE".equals(op)) return java.util.List.of("wave-senegal");
             if ("OM".equals(op) || "ORANGE".equals(op)) return java.util.List.of("orange-money-senegal");
@@ -290,10 +279,6 @@ public class PayDunyaClient implements PayInProviderClient {
             if ("MOOV".equals(op)) return java.util.List.of("moov-ml");
             if ("SAMA".equals(op)) return java.util.List.of("sama-money");
         }
-=======
-        String op = operator.toLowerCase().trim();
-        String countryCode = country.toLowerCase().trim();
->>>>>>> 6451fc7ea20468a53eca0812ef46cd8840cb6a75
         
         // Basic normalization for common operator names
         if (op.contains("orange") || op.equals("om")) op = "orange-money";
