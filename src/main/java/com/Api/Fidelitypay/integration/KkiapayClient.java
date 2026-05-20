@@ -82,7 +82,7 @@ public class KkiapayClient implements PayInProviderClient {
 	HttpHeaders headers = new HttpHeaders();
 	headers.setContentType(MediaType.APPLICATION_JSON);
 
-	headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+	headers.set("x-api-key", resolvePublicKey(request.getCredentials()));
             boolean isWave = request.getFlowType() == PaymentFlowType.WAVE_REDIRECT;
             String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
 
@@ -178,7 +178,7 @@ public class KkiapayClient implements PayInProviderClient {
     }
 
     @Override
-    public PaymentResult validateAction(Payment payment, String actionType, String value) {
+    public PaymentResult validateAction(Payment payment, String actionType, String value, ProviderCredentials credentials) {
         if (!"SUBMIT_OTP".equalsIgnoreCase(actionType)) {
             return PayInProviderClient.super.validateAction(payment, actionType, value);
         }
@@ -186,7 +186,7 @@ public class KkiapayClient implements PayInProviderClient {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+            headers.set("x-api-key", resolvePublicKey(credentials));
             Map<String, Object> payload = Map.of(
                     "transactionId", payment.getProviderPaymentId(),
                     "otp", value,
@@ -218,8 +218,8 @@ public class KkiapayClient implements PayInProviderClient {
     }
 
     @Override
-    public PaymentStatus checkStatus(String providerPaymentId) {
-        KkiapayResponseDTO status = checkTransactionStatus(providerPaymentId);
+    public PaymentStatus checkStatus(String providerPaymentId, ProviderCredentials credentials) {
+        KkiapayResponseDTO status = checkTransactionStatus(providerPaymentId, credentials);
         if (status == null || status.getStatus() == null) {
             return PaymentStatus.PENDING_RECONCILIATION;
         }
@@ -253,10 +253,14 @@ public class KkiapayClient implements PayInProviderClient {
     }
 
     public KkiapayResponseDTO checkTransactionStatus(String transactionId) {
+        return checkTransactionStatus(transactionId, null);
+    }
+
+    public KkiapayResponseDTO checkTransactionStatus(String transactionId, ProviderCredentials credentials) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-api-key", kkiapayProperties.getApi().getPublicKey());
+            headers.set("x-api-key", resolvePublicKey(credentials));
 
             String payload = "{\"transactionId\":\"" + transactionId + "\"}";
             HttpEntity<String> entity = new HttpEntity<>(payload, headers);
@@ -271,6 +275,15 @@ public class KkiapayClient implements PayInProviderClient {
             log.error("Error checking Kkiapay status for txId={}", transactionId, e);
             return null;
         }
+    }
+
+    // Temporary development bridge: if merchant credentials are missing, fall back to
+    // application-level keys. Disable payment.providers.allow-global-credentials-fallback
+    // outside local/dev and remove this fallback once merchant onboarding is complete.
+    private String resolvePublicKey(ProviderCredentials credentials) {
+        return credentials != null && credentials.publicKey() != null
+                ? credentials.publicKey()
+                : kkiapayProperties.getApi().getPublicKey();
     }
 
     private String resolveCallbackUrl(PayInProviderRequest request) {

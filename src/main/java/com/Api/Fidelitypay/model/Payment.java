@@ -70,6 +70,9 @@ public class Payment {
     @Column(length = 100)
     private String providerChannel;
 
+    @Column(name = "merchant_provider_account_id")
+    private Long merchantProviderAccountId;
+
     /** Route technique utilisée */
     @Column
     @JsonProperty("route")

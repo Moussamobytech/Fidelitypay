@@ -79,16 +79,16 @@ public class PayDunyaClient implements PayInProviderClient {
             // 🧐 Debug Log (Masked)
             log.info("PayDunya Attempt | URL: {} | MasterKey: {}... | PrivateKey: {}... | Token: {}...",
                     paydunyaProperties.getApi().getBaseUrl(),
-                    mask(paydunyaProperties.getApi().getMasterKey()),
-                    mask(paydunyaProperties.getApi().getPrivateKey()),
-                    mask(paydunyaProperties.getApi().getToken()));
+                    mask(resolveMasterKey(request.getCredentials())),
+                    mask(resolvePrivateKey(request.getCredentials())),
+                    mask(resolveToken(request.getCredentials())));
 
             // 🔐 Headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("PAYDUNYA-MASTER-KEY", paydunyaProperties.getApi().getMasterKey());
-            headers.set("PAYDUNYA-PRIVATE-KEY", paydunyaProperties.getApi().getPrivateKey());
-            headers.set("PAYDUNYA-TOKEN", paydunyaProperties.getApi().getToken());
+            headers.set("PAYDUNYA-MASTER-KEY", resolveMasterKey(request.getCredentials()));
+            headers.set("PAYDUNYA-PRIVATE-KEY", resolvePrivateKey(request.getCredentials()));
+            headers.set("PAYDUNYA-TOKEN", resolveToken(request.getCredentials()));
 
             // 📦 Payload
             PayDunyaInvoiceDTO invoiceDTO = new PayDunyaInvoiceDTO(
@@ -187,9 +187,9 @@ public class PayDunyaClient implements PayInProviderClient {
     }
 
     @Override
-    public PaymentStatus checkStatus(String providerPaymentId) {
+    public PaymentStatus checkStatus(String providerPaymentId, ProviderCredentials credentials) {
         try {
-            HttpHeaders headers = createHeaders();
+            HttpHeaders headers = createHeaders(credentials);
             ResponseEntity<String> response = restTemplate.exchange(
                     paydunyaProperties.getApi().getBaseUrl() + "/checkout-invoice/confirm/" + providerPaymentId,
                     HttpMethod.GET,
@@ -216,12 +216,16 @@ public class PayDunyaClient implements PayInProviderClient {
     }
 
     public boolean isValidCallbackHash(String hash) {
+        return isValidCallbackHash(hash, null);
+    }
+
+    public boolean isValidCallbackHash(String hash, ProviderCredentials credentials) {
         if (hash == null || hash.isBlank()) {
             return false;
         }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-512");
-            byte[] bytes = digest.digest(paydunyaProperties.getApi().getMasterKey().getBytes(StandardCharsets.UTF_8));
+            byte[] bytes = digest.digest(resolveMasterKey(credentials).getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(bytes).equalsIgnoreCase(hash.trim());
         } catch (Exception e) {
             log.warn("Unable to validate PayDunya callback hash: {}", e.getMessage());
@@ -281,13 +285,34 @@ public class PayDunyaClient implements PayInProviderClient {
         return paydunyaProperties.getCallbackUrl();
     }
 
-    private HttpHeaders createHeaders() {
+    private HttpHeaders createHeaders(ProviderCredentials credentials) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("PAYDUNYA-MASTER-KEY", paydunyaProperties.getApi().getMasterKey());
-        headers.set("PAYDUNYA-PRIVATE-KEY", paydunyaProperties.getApi().getPrivateKey());
-        headers.set("PAYDUNYA-TOKEN", paydunyaProperties.getApi().getToken());
+        headers.set("PAYDUNYA-MASTER-KEY", resolveMasterKey(credentials));
+        headers.set("PAYDUNYA-PRIVATE-KEY", resolvePrivateKey(credentials));
+        headers.set("PAYDUNYA-TOKEN", resolveToken(credentials));
         return headers;
+    }
+
+    // Temporary development bridge: if merchant credentials are missing, fall back to
+    // application-level keys. Disable payment.providers.allow-global-credentials-fallback
+    // outside local/dev and remove this fallback once merchant onboarding is complete.
+    private String resolveMasterKey(ProviderCredentials credentials) {
+        return credentials != null && credentials.masterKey() != null
+                ? credentials.masterKey()
+                : paydunyaProperties.getApi().getMasterKey();
+    }
+
+    private String resolvePrivateKey(ProviderCredentials credentials) {
+        return credentials != null && credentials.privateKey() != null
+                ? credentials.privateKey()
+                : paydunyaProperties.getApi().getPrivateKey();
+    }
+
+    private String resolveToken(ProviderCredentials credentials) {
+        return credentials != null && credentials.token() != null
+                ? credentials.token()
+                : paydunyaProperties.getApi().getToken();
     }
 
     private String safe(String value) {

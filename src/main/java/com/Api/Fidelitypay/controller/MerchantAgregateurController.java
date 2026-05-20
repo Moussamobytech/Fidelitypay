@@ -25,8 +25,12 @@ public class MerchantAgregateurController {
     }
 
     @PostMapping
-    public Agregateur createMerchantAgregateur(Authentication authentication, @RequestBody Agregateur agregateur) {
-        return agregateurService.createMerchantAgregateur(resolveUserId(authentication), agregateur);
+    public ResponseEntity<Agregateur> createMerchantAgregateur(Authentication authentication, @RequestBody Agregateur agregateur) {
+        try {
+            return ResponseEntity.ok(agregateurService.createMerchantAgregateur(resolveUserId(authentication), agregateur));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @PutMapping("/{id}")
@@ -34,6 +38,8 @@ public class MerchantAgregateurController {
             @RequestBody Agregateur agregateur) {
         try {
             return ResponseEntity.ok(agregateurService.updateMerchantAgregateur(resolveUserId(authentication), id, agregateur));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }

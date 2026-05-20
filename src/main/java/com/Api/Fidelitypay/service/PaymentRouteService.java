@@ -1,9 +1,10 @@
 package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.enums.PaymentDirection;
-import com.Api.Fidelitypay.model.PaymentRoute;
-import com.Api.Fidelitypay.repository.PaymentRouteRepository;
+import com.Api.Fidelitypay.model.PaymentProviderRoute;
+import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,30 +14,31 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class PaymentRouteService {
 
-    private final PaymentRouteRepository repository;
-    private final AgregateurService agregateurService;
+    private final PaymentProviderRouteRepository routeRepository;
+    private final MerchantPaymentRouteSettingService routeSettingService;
+    private final MerchantProviderAccountService accountService;
 
-    public List<PaymentRoute> findAvailablePayIn(String country, String operator, String environment) {
-        return repository.findByDirectionAndEnabledTrueAndObservedUpTrueAndCountryAndOperatorAndEnvironmentOrderByPriorityAsc(
-                PaymentDirection.PAYIN,
-                normalize(country),
-                normalize(operator),
-                normalize(environment == null || environment.isBlank() ? "LIVE" : environment));
-    }
+    @Value("${payment.providers.allow-global-credentials-fallback:false}")
+    private boolean allowGlobalCredentialsFallback;
 
-    public List<PaymentRoute> findAvailablePayIn(String country, String operator, String environment, String merchantUserId) {
-        List<PaymentRoute> routes = findAvailablePayIn(country, operator, environment);
-        Set<String> disabledProviders = agregateurService.getDisabledProviderNamesForMerchant(merchantUserId);
-        if (disabledProviders.isEmpty()) {
-            return routes;
-        }
-        return routes.stream()
-                .filter(route -> !disabledProviders.contains(normalize(route.getProvider())))
+    public List<PaymentProviderRoute> findAvailablePayIn(String country, String operator, String environment,
+            String merchantUserId) {
+        String normalizedEnvironment = normalize(environment == null || environment.isBlank() ? "LIVE" : environment);
+        Set<Long> disabledRouteIds = routeSettingService.disabledRouteIdsForMerchant(merchantUserId);
+        return routeRepository.findAvailable(
+                        PaymentDirection.PAYIN,
+                        normalize(country),
+                        normalize(operator),
+                        normalizedEnvironment)
+                .stream()
+                .filter(route -> !disabledRouteIds.contains(route.getId()))
+                .filter(route -> allowGlobalCredentialsFallback || accountService.getEnabledAccount(merchantUserId,
+                        route.getProvider().getId(), normalizedEnvironment) != null)
                 .toList();
     }
 
     public boolean hasAnyPayInRoute(String country, String operator) {
-        return !repository.findByDirectionAndCountryAndOperatorOrderByPriorityAsc(
+        return !routeRepository.findByDirectionAndCountryAndOperatorOrderByPriorityAsc(
                 PaymentDirection.PAYIN,
                 normalize(country),
                 normalize(operator)).isEmpty();

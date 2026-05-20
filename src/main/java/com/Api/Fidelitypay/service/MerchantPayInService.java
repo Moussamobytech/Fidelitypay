@@ -10,12 +10,15 @@ import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.PayInProviderClient;
 import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
+import com.Api.Fidelitypay.integration.ProviderCredentials;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO;
-import com.Api.Fidelitypay.model.PaymentRoute;
+import com.Api.Fidelitypay.model.MerchantProviderAccount;
+import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +37,10 @@ public class MerchantPayInService {
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
     private final WebhookService webhookService;
+    private final MerchantProviderAccountService providerAccountService;
+
+    @Value("${payment.providers.allow-global-credentials-fallback:false}")
+    private boolean allowGlobalCredentialsFallback;
 
     @Transactional
     public MerchantPaymentResponse initiate(MerchantApiPrincipal principal, MerchantPaymentRequest request,
@@ -70,7 +77,7 @@ public class MerchantPayInService {
             throw new IllegalStateException("Payment does not require OTP");
         }
 
-        PaymentResult result = clientFor(payment.getProvider()).validateAction(payment, "SUBMIT_OTP", otp);
+        PaymentResult result = clientFor(payment.getProvider()).validateAction(payment, "SUBMIT_OTP", otp, credentialsFor(payment));
         payment.setProviderResponse(result.getRawResponse());
         payment.setProviderResponseTimeMs((long) result.getResponseTimeMs());
         payment.setUpdatedAt(LocalDateTime.now());
@@ -97,7 +104,7 @@ public class MerchantPayInService {
             if (isTerminal(payment.getStatus())) {
                 return;
             }
-            PaymentStatus verifiedStatus = kkiapayClient.checkStatus(callback.getTransactionId());
+            PaymentStatus verifiedStatus = kkiapayClient.checkStatus(callback.getTransactionId(), credentialsFor(payment));
             if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && callback.isPaymentSucces()) {
                 verifiedStatus = PaymentStatus.SUCCESS;
             } else if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && !callback.isPaymentSucces()) {
@@ -109,15 +116,16 @@ public class MerchantPayInService {
 
     @Transactional
     public void processPayDunyaCallback(String token, String formStatus, String hash) {
-        if (!payDunyaClient.isValidCallbackHash(hash)) {
-            log.warn("Rejected PayDunya callback for token={} due invalid hash", token);
-            return;
-        }
         paymentRepository.findByProviderPaymentId(token).ifPresent(payment -> {
+            ProviderCredentials credentials = credentialsFor(payment);
+            if (!payDunyaClient.isValidCallbackHash(hash, credentials)) {
+                log.warn("Rejected PayDunya callback for token={} due invalid hash", token);
+                return;
+            }
             if (isTerminal(payment.getStatus())) {
                 return;
             }
-            PaymentStatus verifiedStatus = payDunyaClient.checkStatus(token);
+            PaymentStatus verifiedStatus = payDunyaClient.checkStatus(token, credentials);
             if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && formStatus != null) {
                 verifiedStatus = switch (formStatus.toUpperCase()) {
                     case "COMPLETED", "SUCCESS" -> PaymentStatus.SUCCESS;
@@ -152,7 +160,7 @@ public class MerchantPayInService {
         payment.setCreatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        List<PaymentRoute> routes = routeService.findAvailablePayIn(country, operator, environment, principal.getUser().getId());
+        List<PaymentProviderRoute> routes = routeService.findAvailablePayIn(country, operator, environment, principal.getUser().getId());
         if (routes.isEmpty()) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setFailureReason(routeService.hasAnyPayInRoute(country, operator)
@@ -164,16 +172,23 @@ public class MerchantPayInService {
         }
 
         PaymentResult finalResult = null;
-        PaymentRoute finalRoute = null;
+        PaymentProviderRoute finalRoute = null;
         int attempt = 0;
-        for (PaymentRoute route : routes) {
+        for (PaymentProviderRoute route : routes) {
             attempt++;
-            PaymentResult result = clientFor(route.getProvider()).initiatePayIn(toProviderRequest(payment, route));
+            MerchantProviderAccount account = providerAccountService.getEnabledAccount(principal.getUser().getId(),
+                    route.getProvider().getId(), environment);
+            if (account == null && !allowGlobalCredentialsFallback) {
+                continue;
+            }
+            ProviderCredentials credentials = account == null ? null : providerAccountService.decrypt(account);
+            PaymentResult result = clientFor(route.getProvider().getCode()).initiatePayIn(toProviderRequest(payment, route, credentials));
             finalResult = result;
             finalRoute = route;
             payment.setAttemptCount(attempt);
-            payment.setProvider(route.getProvider());
-            payment.setRouteName(route.getProvider() + "_" + route.getOperator() + "_" + route.getCountry());
+            payment.setProvider(route.getProvider().getCode());
+            payment.setMerchantProviderAccountId(account == null ? null : account.getId());
+            payment.setRouteName(route.getProvider().getCode() + "_" + route.getOperator() + "_" + route.getCountry());
             payment.setFlowType(route.getFlowType().name());
             payment.setProviderChannel(route.getProviderChannel());
             payment.setProviderResponse(result.getRawResponse());
@@ -213,7 +228,7 @@ public class MerchantPayInService {
         }
 
         payment.setStatus(PaymentStatus.FAILED);
-        payment.setProvider(finalRoute != null ? finalRoute.getProvider() : null);
+        payment.setProvider(finalRoute != null ? finalRoute.getProvider().getCode() : null);
         payment.setFailureReason(determineFailureReason(finalResult));
         payment.setRouteHealth("DEGRADED");
         paymentRepository.save(payment);
@@ -221,8 +236,9 @@ public class MerchantPayInService {
         return toResponse(payment);
     }
 
-    private PayInProviderRequest toProviderRequest(Payment payment, PaymentRoute route) {
+    private PayInProviderRequest toProviderRequest(Payment payment, PaymentProviderRoute route, ProviderCredentials credentials) {
         return PayInProviderRequest.builder()
+                .credentials(credentials)
                 .paymentId(payment.getPaymentId())
                 .amount(payment.getAmount().longValue())
                 .country(payment.getCountry())
@@ -236,6 +252,13 @@ public class MerchantPayInService {
                 .returnUrl(payment.getReturnUrl())
                 .cancelUrl(payment.getCancelUrl())
                 .build();
+    }
+
+    private ProviderCredentials credentialsFor(Payment payment) {
+        if (payment.getMerchantProviderAccountId() == null) {
+            return null;
+        }
+        return providerAccountService.decrypt(providerAccountService.getAccount(payment.getMerchantProviderAccountId()));
     }
 
     private PayInProviderClient clientFor(String provider) {

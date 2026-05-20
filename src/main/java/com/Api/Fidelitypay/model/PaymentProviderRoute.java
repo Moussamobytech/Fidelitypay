@@ -6,43 +6,45 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "payment_routes", indexes = {
-        @Index(name = "idx_payment_route_lookup", columnList = "direction,provider,country,operator,environment,enabled"),
-        @Index(name = "idx_payment_route_priority", columnList = "direction,country,operator,priority")
+@Table(name = "payment_provider_routes", indexes = {
+        @Index(name = "idx_provider_route_lookup", columnList = "direction,country,operator,environment,enabled,observed_up"),
+        @Index(name = "idx_provider_route_priority", columnList = "direction,country,operator,priority"),
+        @Index(name = "idx_provider_route_provider", columnList = "provider_id")
 }, uniqueConstraints = {
-        @UniqueConstraint(name = "uk_payment_route", columnNames = {
-                "direction", "provider", "country", "operator", "flow_type", "environment"
+        @UniqueConstraint(name = "uk_payment_provider_route", columnNames = {
+                "provider_id", "direction", "country", "operator", "flow_type", "environment"
         })
 })
-public class PaymentRoute {
+public class PaymentProviderRoute {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "provider_id", nullable = false)
+    private PaymentProvider provider;
+
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private PaymentDirection direction = PaymentDirection.PAYIN;
-
-    @Column(nullable = false, length = 50)
-    private String provider;
 
     @Column(nullable = false, length = 3)
     private String country;
@@ -51,7 +53,6 @@ public class PaymentRoute {
     private String operator;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "flow_type", nullable = false, length = 40)
     private PaymentFlowType flowType;
 
@@ -84,8 +85,7 @@ public class PaymentRoute {
 
     @PrePersist
     @PreUpdate
-    public void onUpdate() {
-        this.provider = normalize(provider);
+    public void normalize() {
         this.country = normalize(country);
         this.operator = normalize(operator);
         this.environment = normalize(environment);

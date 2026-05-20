@@ -7,6 +7,7 @@ import lombok.Data;
 @Data
 @Builder
 public class PayInProviderRequest {
+    private ProviderCredentials credentials;
     private String paymentId;
     private long amount;
     private String country;

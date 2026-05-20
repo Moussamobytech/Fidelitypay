@@ -1,11 +1,14 @@
 package com.Api.Fidelitypay.service;
 
+import com.Api.Fidelitypay.enums.PaymentProviderStatus;
 import com.Api.Fidelitypay.model.Agregateur;
 import com.Api.Fidelitypay.repository.AgregateurRepository;
+import com.Api.Fidelitypay.repository.PaymentProviderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -16,6 +19,9 @@ public class AgregateurService {
 
     @Autowired
     private AgregateurRepository agregateurRepository;
+
+    @Autowired
+    private PaymentProviderRepository paymentProviderRepository;
 
     public List<Agregateur> getAllAgregateurs() {
         return agregateurRepository.findAll();
@@ -40,6 +46,7 @@ public class AgregateurService {
         agregateur.setId(null);
         agregateur.setOwnerUserId(userId);
         agregateur.setEnabled(true);
+        normalizeMerchantAggregator(agregateur);
         return createAgregateur(agregateur);
     }
 
@@ -74,6 +81,7 @@ public class AgregateurService {
         agregateur.setCleAtoken(agregateurDetails.getCleAtoken());
         agregateur.setNompays(agregateurDetails.getNompays());
         agregateur.setNomOperateur(agregateurDetails.getNomOperateur());
+        normalizeMerchantAggregator(agregateur);
         return agregateurRepository.save(agregateur);
     }
 
@@ -110,6 +118,28 @@ public class AgregateurService {
     public void deleteMerchantAgregateur(String userId, Long id) {
         getOwnedAgregateur(userId, id);
         agregateurRepository.deleteById(id);
+    }
+
+    private void normalizeMerchantAggregator(Agregateur agregateur) {
+        String provider = agregateur.getNomA() == null ? "" : agregateur.getNomA().trim().toUpperCase();
+        Set<String> supportedProviders = paymentProviderRepository.findByStatusOrderByDisplayNameAsc(PaymentProviderStatus.ACTIVE)
+                .stream()
+                .map(paymentProvider -> paymentProvider.getCode() == null ? null : paymentProvider.getCode().trim().toUpperCase())
+                .filter(providerName -> providerName != null && !providerName.isBlank())
+                .collect(Collectors.toSet());
+        if (supportedProviders.isEmpty()) {
+            supportedProviders = Set.of("KKIAPAY", "PAYDUNYA");
+        }
+        if (!supportedProviders.contains(provider)) {
+            throw new IllegalArgumentException("Unsupported payment aggregator: " + agregateur.getNomA());
+        }
+        agregateur.setNomA(provider);
+        agregateur.setNompays(null);
+        agregateur.setNomOperateur(null);
+        if (agregateur.getCountryConfigs() == null) {
+            agregateur.setCountryConfigs(new ArrayList<>());
+        }
+        agregateur.getCountryConfigs().clear();
     }
 
     private Agregateur getOwnedAgregateur(String userId, Long id) {
