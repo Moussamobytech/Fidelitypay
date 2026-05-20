@@ -39,6 +39,12 @@ public class Agregateur {
     @Column(nullable = false, length = 255)
     private String cleAtoken;
 
+    @Column(nullable = true, length = 255)
+    private String cleAmaster;
+
+    @Column(nullable = true, length = 255)
+    private String baseUrl;
+
     // Old fields kept as nullable to avoid DB constraint errors during migration
     @Column(nullable = true)
     private String nompays;
