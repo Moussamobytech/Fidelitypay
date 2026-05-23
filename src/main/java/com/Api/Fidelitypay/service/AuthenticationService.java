@@ -22,6 +22,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final EmailService emailService;
     private final String adminCreationSecret;
 
     public AuthenticationService(
@@ -29,12 +30,44 @@ public class AuthenticationService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthenticationManager authenticationManager,
+            EmailService emailService,
             @Value("${admin.creation.secret:}") String adminCreationSecret) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
+        this.emailService = emailService;
         this.adminCreationSecret = adminCreationSecret;
+    }
+
+    public void forgotPassword(String email) {
+        String emailClean = email.trim().toLowerCase();
+        User user = userRepository.findByEmail(emailClean)
+                .orElseThrow(() -> new IllegalArgumentException("Aucun compte associé à cet email."));
+
+        // Generate a simple short-lived token for reset
+        String resetToken = jwtService.generateToken(user);
+        // Assuming frontend is running locally or configured elsewhere. Using typical angular port.
+        String resetLink = "http://localhost:4200/reset-password?token=" + resetToken;
+
+        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+        log.info("Processus de réinitialisation de mot de passe initié pour: {}", user.getEmail());
+    }
+
+    public void resetPassword(String token, String newPassword) {
+        // Validate token and extract email
+        String email = jwtService.extractUsername(token);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Utilisateur introuvable."));
+
+        if (!jwtService.isTokenValid(token, user)) {
+            throw new IllegalArgumentException("Le lien de réinitialisation est invalide ou expiré.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword.trim()));
+        userRepository.save(user);
+        log.info("🔐 Mot de passe réinitialisé avec succès pour: {}", email);
     }
 
     /**

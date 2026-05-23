@@ -64,4 +64,38 @@ public class AuthController {
             return ResponseEntity.status(500).body(Map.of("message", "Une erreur interne est survenue"));
         }
     }
+
+    /**
+     * Mot de passe oublié.
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody com.Api.Fidelitypay.controller.dto.ForgotPasswordRequest request) {
+        log.info("📧 Demande de réinitialisation de mot de passe pour: {}", request.getEmail());
+        try {
+            authService.forgotPassword(request.getEmail());
+            return ResponseEntity.ok(Map.of("message", "Un email de réinitialisation a été envoyé à votre adresse."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("❌ Erreur inattendue lors de la réinitialisation de {}: {}", request.getEmail(), e.toString());
+            return ResponseEntity.status(500).body(Map.of("message", "Une erreur interne est survenue"));
+        }
+    }
+
+    /**
+     * Réinitialisation effective du mot de passe avec le token.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody com.Api.Fidelitypay.controller.dto.ResetPasswordRequest request) {
+        log.info("🔐 Réinitialisation du mot de passe avec token reçu.");
+        try {
+            authService.resetPassword(request.getToken(), request.getNewPassword());
+            return ResponseEntity.ok(Map.of("message", "Votre mot de passe a été réinitialisé avec succès."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("❌ Erreur inattendue lors de la mise à jour du mot de passe: {}", e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("message", "Une erreur interne est survenue"));
+        }
+    }
 }
