@@ -25,7 +25,7 @@ class PaymentServiceTest {
         private WebhookService webhookService;
         private KkiapayClient kkiapayClient;
         private PayDunyaClient payDunyaClient;
-        private RouteSelectionService routeSelectionService;
+        private PaymentRouteService routeService;
         private PaymentService paymentService;
 
         @BeforeEach
@@ -35,16 +35,22 @@ class PaymentServiceTest {
                 webhookService = mock(WebhookService.class);
                 kkiapayClient = mock(KkiapayClient.class);
                 payDunyaClient = mock(PayDunyaClient.class);
-                routeSelectionService = mock(RouteSelectionService.class);
+                routeService = mock(PaymentRouteService.class);
 
-                com.Api.Fidelitypay.model.Route route1 = new com.Api.Fidelitypay.model.Route();
-                route1.setProvider("KKIAPAY");
-                com.Api.Fidelitypay.model.Route route2 = new com.Api.Fidelitypay.model.Route();
-                route2.setProvider("PAYDUNYA");
-                when(routeSelectionService.getSortedRoutes(anyString(), anyString())).thenReturn(java.util.List.of(route1, route2));
+                com.Api.Fidelitypay.model.PaymentProviderRoute route1 = route("KKIAPAY");
+                com.Api.Fidelitypay.model.PaymentProviderRoute route2 = route("PAYDUNYA");
+                when(routeService.findAvailablePayIn(anyString(), anyString(), eq("LIVE"), any())).thenReturn(java.util.List.of(route1, route2));
 
                 paymentService = new PaymentService(paymentRepository, logEntryRepository,
-                                webhookService, kkiapayClient, payDunyaClient, routeSelectionService);
+                                webhookService, kkiapayClient, payDunyaClient, routeService);
+        }
+
+        private com.Api.Fidelitypay.model.PaymentProviderRoute route(String code) {
+                com.Api.Fidelitypay.model.PaymentProvider provider = new com.Api.Fidelitypay.model.PaymentProvider();
+                provider.setCode(code);
+                com.Api.Fidelitypay.model.PaymentProviderRoute route = new com.Api.Fidelitypay.model.PaymentProviderRoute();
+                route.setProvider(provider);
+                return route;
         }
 
         @Test

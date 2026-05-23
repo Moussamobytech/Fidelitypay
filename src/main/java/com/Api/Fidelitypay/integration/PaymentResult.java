@@ -14,6 +14,7 @@ public class PaymentResult {
     private String rawResponse;
     private double responseTimeMs;
     private ErrorType errorType;
+    private String actualOperator;
     private boolean providerTransactionCreated;
     private boolean requiresAction;
     private String nextActionType;
@@ -24,6 +25,14 @@ public class PaymentResult {
 
     public PaymentResult(boolean success) {
         this.success = success;
+    }
+
+    public String getActualOperator() {
+        return actualOperator;
+    }
+
+    public void setActualOperator(String actualOperator) {
+        this.actualOperator = actualOperator;
     }
 
     public ErrorType getErrorType() {

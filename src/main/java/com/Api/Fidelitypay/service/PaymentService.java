@@ -8,7 +8,7 @@ import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.Payment;
-import com.Api.Fidelitypay.model.Route;
+import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
@@ -33,7 +33,7 @@ public class PaymentService {
     private final WebhookService webhookService;
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
-    private final RouteSelectionService routeSelectionService;
+    private final PaymentRouteService routeService;
 
     public PaymentService(
             PaymentRepository paymentRepository,
@@ -41,13 +41,13 @@ public class PaymentService {
             WebhookService webhookService,
             KkiapayClient kkiapayClient,
             PayDunyaClient payDunyaClient,
-            RouteSelectionService routeSelectionService) {
+            PaymentRouteService routeService) {
         this.paymentRepository = paymentRepository;
         this.logEntryRepository = logEntryRepository;
         this.webhookService = webhookService;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
-        this.routeSelectionService = routeSelectionService;
+        this.routeService = routeService;
     }
 
     /**
@@ -55,11 +55,11 @@ public class PaymentService {
      */
     public List<String> getOptionsByCountry(String country) {
         if (country == null || country.isEmpty()) return List.of();
-        return routeSelectionService.getAvailableOperatorsByCountry(country);
+        return routeService.findAvailablePayInOperators(country);
     }
 
     /**
-     * Initie un paiement avec fallback direct sur les agrégateurs (sans passer par la BDD des routes)
+     * Initie un paiement through the scored provider-route catalog.
      */
     public Payment initiatePayment(User user, double amount, String country, String operatorInput, String phone,
             String firstname,
@@ -94,10 +94,13 @@ public class PaymentService {
             return payment;
         }
 
-        // 2. Récupérer les providers ordonnés pour ce pays/opérateur
-        List<String> providersToTry = routeSelectionService.getSortedRoutes(operator, countryCode)
+        // 2. Use the same scored provider-route catalog as the merchant API flow.
+        List<String> providersToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
+                        user == null ? null : user.getId())
                 .stream()
-                .map(Route::getProvider)
+                .map(PaymentProviderRoute::getProvider)
+                .map(provider -> provider.getCode())
+                .distinct()
                 .toList();
 
         if (providersToTry.isEmpty()) {
@@ -439,5 +442,19 @@ public class PaymentService {
 
             webhookService.sendWebhook(payment);
         });
+    }
+    private String normalizeOperator(String op) {
+        if (op == null || op.isBlank()) {
+            return "UNKNOWN";
+        }
+        String upper = op.toUpperCase().trim();
+        if (upper.contains("MOOV")) return "MOOV";
+        if (upper.contains("MTN")) return "MTN";
+        if (upper.contains("WAVE")) return "WAVE";
+        if (upper.contains("ORANGE") || upper.equals("OM")) return "ORANGE";
+        if (upper.contains("FREE")) return "FREE";
+        if (upper.contains("YAS") || upper.contains("MIXX")) return "YAS";
+        if (upper.contains("TMO")) return "TMO";
+        return upper;
     }
 }

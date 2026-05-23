@@ -30,6 +30,13 @@ public class PaymentRouteSettingsController {
                 payload.getOrDefault("enabled", true)));
     }
 
+    @PatchMapping("/api/v1/developer/payment-routes/{routeId}/priority")
+    public ResponseEntity<PaymentProviderRouteResponse> setMerchantRoutePriority(Authentication authentication,
+            @PathVariable Long routeId, @RequestBody Map<String, Integer> payload) {
+        return ResponseEntity.ok(routeSettingService.setMerchantRoutePriority(resolveUserId(authentication), routeId,
+                payload.get("priority")));
+    }
+
     @GetMapping("/api/v1/admin/payment-routes")
     public List<PaymentProviderRouteResponse> listPlatformRoutes() {
         return routeSettingService.listPlatformPayInRoutes();

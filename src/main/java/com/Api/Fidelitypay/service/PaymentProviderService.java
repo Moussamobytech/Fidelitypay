@@ -106,8 +106,12 @@ public class PaymentProviderService {
     }
 
     public PaymentProviderRouteResponse toRouteResponse(PaymentProviderRoute route, Boolean merchantEnabled) {
+        return toRouteResponse(route, merchantEnabled, null, null);
+    }
+
+    public PaymentProviderRouteResponse toRouteResponse(PaymentProviderRoute route, Boolean merchantEnabled,
+            Integer merchantPriority, Double selectionScore) {
         boolean effectiveEnabled = route.isEnabled()
-                && route.isObservedUp()
                 && route.getProvider().getStatus() == PaymentProviderStatus.ACTIVE
                 && (merchantEnabled == null || merchantEnabled);
         return PaymentProviderRouteResponse.builder()
@@ -122,8 +126,13 @@ public class PaymentProviderService {
                 .environment(route.getEnvironment())
                 .providerChannel(route.getProviderChannel())
                 .priority(route.getPriority())
+                .merchantPriority(merchantPriority)
+                .effectivePriority(merchantPriority == null ? route.getPriority() : merchantPriority)
+                .cost(route.getCost())
+                .avgLatency(route.getAvgLatency())
+                .failureRate(route.getFailureRate())
+                .selectionScore(selectionScore)
                 .platformEnabled(route.isEnabled())
-                .observedUp(route.isObservedUp())
                 .merchantEnabled(merchantEnabled)
                 .effectiveEnabled(effectiveEnabled)
                 .build();
@@ -149,7 +158,7 @@ public class PaymentProviderService {
                 : request.getEnvironment());
         route.setProviderChannel(request.getProviderChannel());
         route.setEnabled(request.isEnabled());
-        route.setObservedUp(request.isObservedUp());
         route.setPriority(request.getPriority());
+        route.setCost(request.getCost());
     }
 }

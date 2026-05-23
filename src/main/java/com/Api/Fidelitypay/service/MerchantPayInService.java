@@ -4,6 +4,7 @@ import com.Api.Fidelitypay.controller.dto.MerchantApiPrincipal;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentRequest;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentResponse;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
@@ -12,9 +13,11 @@ import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.ProviderCredentials;
 import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO;
+import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.MerchantProviderAccount;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.model.Payment;
+import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +36,7 @@ import java.util.UUID;
 public class MerchantPayInService {
 
     private final PaymentRepository paymentRepository;
+    private final LogEntryRepository logEntryRepository;
     private final PaymentRouteService routeService;
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
@@ -183,12 +187,13 @@ public class MerchantPayInService {
             }
             ProviderCredentials credentials = account == null ? null : providerAccountService.decrypt(account);
             PaymentResult result = clientFor(route.getProvider().getCode()).initiatePayIn(toProviderRequest(payment, route, credentials));
+            saveRouteAttempt(payment, route, result, attempt > 1);
             finalResult = result;
             finalRoute = route;
             payment.setAttemptCount(attempt);
             payment.setProvider(route.getProvider().getCode());
             payment.setMerchantProviderAccountId(account == null ? null : account.getId());
-            payment.setRouteName(route.getProvider().getCode() + "_" + route.getOperator() + "_" + route.getCountry());
+            payment.setRouteName(routeName(route));
             payment.setFlowType(route.getFlowType().name());
             payment.setProviderChannel(route.getProviderChannel());
             payment.setProviderResponse(result.getRawResponse());
@@ -234,6 +239,30 @@ public class MerchantPayInService {
         paymentRepository.save(payment);
         webhookService.sendWebhook(payment);
         return toResponse(payment);
+    }
+
+    private void saveRouteAttempt(Payment payment, PaymentProviderRoute route, PaymentResult result, boolean fallbackUsed) {
+        LogEntry logEntry = new LogEntry();
+        logEntry.setPaymentId(payment.getPaymentId());
+        logEntry.setRouteUsed(routeName(route));
+        logEntry.setProvider(route.getProvider().getCode());
+        logEntry.setResponseTime(result == null ? 0.0 : result.getResponseTimeMs());
+        logEntry.setStatus(result != null && result.isSuccess()
+                ? LogStatus.SUCCESS
+                : result != null && result.isProviderTransactionCreated() ? LogStatus.PENDING : LogStatus.FAILED);
+        logEntry.setFailureReason(result != null && result.isSuccess() ? null : determineFailureReason(result));
+        logEntry.setErrorType(result == null ? null : result.getErrorType());
+        logEntry.setFallbackUsed(fallbackUsed);
+        String message = result == null ? "No provider response" : result.getRawResponse();
+        if (message != null && message.length() > 5000) {
+            message = message.substring(0, 4990) + "...[TRUNCATED]";
+        }
+        logEntry.setMessage(message);
+        logEntryRepository.save(logEntry);
+    }
+
+    private String routeName(PaymentProviderRoute route) {
+        return route.getProvider().getCode() + "_" + route.getOperator() + "_" + route.getCountry();
     }
 
     private PayInProviderRequest toProviderRequest(Payment payment, PaymentProviderRoute route, ProviderCredentials credentials) {

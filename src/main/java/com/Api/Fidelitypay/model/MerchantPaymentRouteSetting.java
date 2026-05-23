@@ -44,6 +44,9 @@ public class MerchantPaymentRouteSetting {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    // Lower values are preferred for this merchant. Null keeps platform priority.
+    private Integer priority;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

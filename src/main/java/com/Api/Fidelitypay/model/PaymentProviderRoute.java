@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 @Entity
 @Data
 @Table(name = "payment_provider_routes", indexes = {
-        @Index(name = "idx_provider_route_lookup", columnList = "direction,country,operator,environment,enabled,observed_up"),
+        @Index(name = "idx_provider_route_lookup", columnList = "direction,country,operator,environment,enabled"),
         @Index(name = "idx_provider_route_priority", columnList = "direction,country,operator,priority"),
         @Index(name = "idx_provider_route_provider", columnList = "provider_id")
 }, uniqueConstraints = {
@@ -65,11 +65,13 @@ public class PaymentProviderRoute {
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Column(nullable = false)
-    private boolean observedUp = true;
 
     @Column(nullable = false)
     private int priority = 100;
+
+    // Route price/fee input for selection. Keep static until production measurements start.
+    @Column(nullable = false)
+    private double cost = 0.0;
 
     @Column(nullable = false)
     private double avgLatency = 0.0;

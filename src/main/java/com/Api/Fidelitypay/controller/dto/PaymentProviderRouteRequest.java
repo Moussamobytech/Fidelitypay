@@ -14,6 +14,6 @@ public class PaymentProviderRouteRequest {
     private String environment = "LIVE";
     private String providerChannel;
     private boolean enabled = true;
-    private boolean observedUp = true;
     private int priority = 100;
+    private double cost = 0.0;
 }

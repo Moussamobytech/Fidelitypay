@@ -19,8 +19,13 @@ public class PaymentProviderRouteResponse {
     private String environment;
     private String providerChannel;
     private int priority;
+    private Integer merchantPriority;
+    private int effectivePriority;
+    private double cost;
+    private double avgLatency;
+    private double failureRate;
+    private Double selectionScore;
     private boolean platformEnabled;
-    private boolean observedUp;
     private Boolean merchantEnabled;
     private boolean effectiveEnabled;
 }

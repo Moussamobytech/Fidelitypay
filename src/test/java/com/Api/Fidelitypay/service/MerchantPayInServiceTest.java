@@ -10,13 +10,15 @@ import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.model.ApiKey;
-import com.Api.Fidelitypay.model.PaymentRoute;
+import com.Api.Fidelitypay.model.PaymentProvider;
+import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -35,21 +37,27 @@ import static org.mockito.Mockito.when;
 class MerchantPayInServiceTest {
 
     private PaymentRepository paymentRepository;
+    private com.Api.Fidelitypay.repository.LogEntryRepository logEntryRepository;
     private PaymentRouteService routeService;
     private KkiapayClient kkiapayClient;
     private PayDunyaClient payDunyaClient;
     private WebhookService webhookService;
+    private MerchantProviderAccountService providerAccountService;
     private MerchantPayInService service;
     private MerchantApiPrincipal principal;
 
     @BeforeEach
     void setUp() {
         paymentRepository = mock(PaymentRepository.class);
+        logEntryRepository = mock(com.Api.Fidelitypay.repository.LogEntryRepository.class);
         routeService = mock(PaymentRouteService.class);
         kkiapayClient = mock(KkiapayClient.class);
         payDunyaClient = mock(PayDunyaClient.class);
         webhookService = mock(WebhookService.class);
-        service = new MerchantPayInService(paymentRepository, routeService, kkiapayClient, payDunyaClient, webhookService);
+        providerAccountService = mock(MerchantProviderAccountService.class);
+        service = new MerchantPayInService(paymentRepository, logEntryRepository, routeService, kkiapayClient, payDunyaClient, webhookService,
+                providerAccountService);
+        ReflectionTestUtils.setField(service, "allowGlobalCredentialsFallback", true);
 
         User user = User.builder()
                 .id("user-1")
@@ -207,9 +215,11 @@ class MerchantPayInServiceTest {
         return request;
     }
 
-    private PaymentRoute route(String provider, String country, String operator, PaymentFlowType flowType, int priority) {
-        PaymentRoute route = new PaymentRoute();
-        route.setProvider(provider);
+    private PaymentProviderRoute route(String provider, String country, String operator, PaymentFlowType flowType, int priority) {
+        PaymentProviderRoute route = new PaymentProviderRoute();
+        PaymentProvider paymentProvider = new PaymentProvider();
+        paymentProvider.setCode(provider);
+        route.setProvider(paymentProvider);
         route.setCountry(country);
         route.setOperator(operator);
         route.setFlowType(flowType);
@@ -217,7 +227,6 @@ class MerchantPayInServiceTest {
         route.setEnvironment("SANDBOX");
         route.setPriority(priority);
         route.setEnabled(true);
-        route.setObservedUp(true);
         return route;
     }
 

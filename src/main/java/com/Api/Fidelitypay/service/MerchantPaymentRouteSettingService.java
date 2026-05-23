@@ -26,14 +26,17 @@ public class MerchantPaymentRouteSettingService {
 
     @Transactional(readOnly = true)
     public List<PaymentProviderRouteResponse> listMerchantPayInRoutes(String userId) {
-        Map<Long, MerchantPaymentRouteSetting> settingsByRoute = settingRepository.findByUserId(userId).stream()
-                .collect(Collectors.toMap(setting -> setting.getPaymentProviderRoute().getId(), Function.identity()));
+        Map<Long, MerchantPaymentRouteSetting> settingsByRoute = settingsByRoute(userId);
         return routeRepository.findByDirectionWithProviderOrderByCountryAscOperatorAscPriorityAsc(PaymentDirection.PAYIN)
                 .stream()
-                .map(route -> paymentProviderService.toRouteResponse(route,
-                        settingsByRoute.containsKey(route.getId())
-                                ? settingsByRoute.get(route.getId()).isEnabled()
-                                : null))
+                .map(route -> {
+                    MerchantPaymentRouteSetting setting = settingsByRoute.get(route.getId());
+                    Integer merchantPriority = setting == null ? null : setting.getPriority();
+                    return paymentProviderService.toRouteResponse(route,
+                            setting == null ? null : setting.isEnabled(),
+                            merchantPriority,
+                            PaymentRouteService.score(route, merchantPriority));
+                })
                 .toList();
     }
 
@@ -41,7 +44,8 @@ public class MerchantPaymentRouteSettingService {
     public List<PaymentProviderRouteResponse> listPlatformPayInRoutes() {
         return routeRepository.findByDirectionWithProviderOrderByCountryAscOperatorAscPriorityAsc(PaymentDirection.PAYIN)
                 .stream()
-                .map(route -> paymentProviderService.toRouteResponse(route, null))
+                .map(route -> paymentProviderService.toRouteResponse(route, null, null,
+                        PaymentRouteService.score(route, null)))
                 .toList();
     }
 
@@ -57,7 +61,9 @@ public class MerchantPaymentRouteSettingService {
                     return created;
                 });
         setting.setEnabled(enabled);
-        return paymentProviderService.toRouteResponse(route, settingRepository.save(setting).isEnabled());
+        MerchantPaymentRouteSetting saved = settingRepository.save(setting);
+        return paymentProviderService.toRouteResponse(route, saved.isEnabled(), saved.getPriority(),
+                PaymentRouteService.score(route, saved.getPriority()));
     }
 
     @Transactional
@@ -65,16 +71,48 @@ public class MerchantPaymentRouteSettingService {
         PaymentProviderRoute route = routeRepository.findById(routeId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment provider route not found"));
         route.setEnabled(enabled);
-        return paymentProviderService.toRouteResponse(routeRepository.save(route), null);
+        PaymentProviderRoute saved = routeRepository.save(route);
+        return paymentProviderService.toRouteResponse(saved, null, null, PaymentRouteService.score(saved, null));
+    }
+
+    @Transactional
+    public PaymentProviderRouteResponse setMerchantRoutePriority(String userId, Long routeId, Integer priority) {
+        PaymentProviderRoute route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment provider route not found"));
+        MerchantPaymentRouteSetting setting = settingRepository.findByUserIdAndPaymentProviderRouteId(userId, routeId)
+                .orElseGet(() -> {
+                    MerchantPaymentRouteSetting created = new MerchantPaymentRouteSetting();
+                    created.setUserId(userId);
+                    created.setPaymentProviderRoute(route);
+                    return created;
+                });
+        setting.setPriority(priority);
+        MerchantPaymentRouteSetting saved = settingRepository.save(setting);
+        return paymentProviderService.toRouteResponse(route, saved.isEnabled(), saved.getPriority(),
+                PaymentRouteService.score(route, saved.getPriority()));
     }
 
     @Transactional(readOnly = true)
     public Set<Long> disabledRouteIdsForMerchant(String userId) {
-        if (userId == null || userId.isBlank()) {
-            return Set.of();
-        }
-        return settingRepository.findByUserIdAndEnabledFalse(userId).stream()
+        return settingsByRoute(userId).values().stream()
+                .filter(setting -> !setting.isEnabled())
                 .map(setting -> setting.getPaymentProviderRoute().getId())
                 .collect(Collectors.toSet());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, Integer> routePrioritiesForMerchant(String userId) {
+        return settingsByRoute(userId).values().stream()
+                .filter(setting -> setting.getPriority() != null)
+                .collect(Collectors.toMap(setting -> setting.getPaymentProviderRoute().getId(),
+                        MerchantPaymentRouteSetting::getPriority));
+    }
+
+    private Map<Long, MerchantPaymentRouteSetting> settingsByRoute(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return Map.of();
+        }
+        return settingRepository.findByUserId(userId).stream()
+                .collect(Collectors.toMap(setting -> setting.getPaymentProviderRoute().getId(), Function.identity()));
     }
 }

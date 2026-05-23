@@ -18,7 +18,6 @@ public class PaymentRouteSettingResponse {
     private String providerChannel;
     private int priority;
     private boolean platformEnabled;
-    private boolean observedUp;
     private Boolean merchantEnabled;
     private boolean effectiveEnabled;
 }

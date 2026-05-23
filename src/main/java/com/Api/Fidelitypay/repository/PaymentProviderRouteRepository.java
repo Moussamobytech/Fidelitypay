@@ -19,7 +19,6 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
               and r.operator = :operator
               and r.environment = :environment
               and r.enabled = true
-              and r.observedUp = true
               and p.status = com.Api.Fidelitypay.enums.PaymentProviderStatus.ACTIVE
             order by r.priority asc
             """)
@@ -33,6 +32,18 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
             PaymentDirection direction,
             String country,
             String operator);
+
+    @Query("""
+            select distinct r.operator from PaymentProviderRoute r
+            join r.provider p
+            where r.direction = :direction
+              and r.country = :country
+              and r.enabled = true
+              and p.status = com.Api.Fidelitypay.enums.PaymentProviderStatus.ACTIVE
+            order by r.operator asc
+            """)
+    List<String> findAvailableOperators(@Param("direction") PaymentDirection direction,
+            @Param("country") String country);
 
     @Query("""
             select r from PaymentProviderRoute r

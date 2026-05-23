@@ -1,16 +1,18 @@
 package com.Api.Fidelitypay.service;
 
+import com.Api.Fidelitypay.controller.dto.MonitoringRouteResponse;
+import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.LogStatus;
+import com.Api.Fidelitypay.enums.PaymentProviderStatus;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.model.LogEntry;
-import com.Api.Fidelitypay.model.Route;
-import com.Api.Fidelitypay.enums.ErrorType;
-import com.Api.Fidelitypay.enums.LogStatus;
-import com.Api.Fidelitypay.repository.RouteRepository;
+import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.repository.LogEntryRepository;
+import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,16 +21,13 @@ import java.util.List;
 @Slf4j
 public class MonitoringService {
 
-    private final RouteRepository routeRepository;
+    private final PaymentProviderRouteRepository routeRepository;
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
     private final LogEntryRepository logEntryRepository;
 
-    public MonitoringService(
-            RouteRepository routeRepository,
-            KkiapayClient kkiapayClient,
-            PayDunyaClient payDunyaClient,
-            LogEntryRepository logEntryRepository) {
+    public MonitoringService(PaymentProviderRouteRepository routeRepository, KkiapayClient kkiapayClient,
+            PayDunyaClient payDunyaClient, LogEntryRepository logEntryRepository) {
         this.routeRepository = routeRepository;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
@@ -41,100 +40,99 @@ public class MonitoringService {
 
     @Scheduled(fixedRateString = "${monitoring.interval:300000}")
     public void checkRoutes() {
-
-        for (Route route : routeRepository.findAll()) {
-
-            boolean isUp = true; // optimiste
+        for (PaymentProviderRoute route : routeRepository.findAll()) {
             long start = System.nanoTime();
-
+            boolean isUp;
             String errorMessage = null;
-            ErrorType errorType = null;
 
             try {
-                if ("Kkiapay".equalsIgnoreCase(route.getProvider())) {
-                    isUp = kkiapayClient.isAvailable();
-                } else if ("PAYDUNYA".equalsIgnoreCase(route.getProvider())) {
-                    isUp = payDunyaClient.isAvailable();
-                } else {
-                    log.warn("Unknown provider: {}", route.getProvider());
-                    errorMessage = "Unknown provider: " + route.getProvider();
-                    errorType = ErrorType.UNKNOWN;
-                    isUp = false;
-                }
-
-                if (!isUp && errorMessage == null) {
-                    errorMessage = "Service unavailable (Health check failed)";
-                    errorType = ErrorType.PROVIDER_DOWN;
+                isUp = isProviderAvailable(route);
+                if (!isUp) {
+                    errorMessage = "Service unavailable (health check failed)";
                 }
             } catch (Exception e) {
-                log.error("Monitoring error for provider {}", route.getProvider(), e);
                 isUp = false;
-
-                if (e instanceof java.net.SocketTimeoutException
-                        || e.getCause() instanceof java.net.SocketTimeoutException) {
-                    errorType = ErrorType.TIMEOUT;
-                    errorMessage = "Timeout: le provider ne répond pas";
-                } else if (e instanceof java.net.UnknownHostException
-                        || e.getCause() instanceof java.net.UnknownHostException) {
-                    errorType = ErrorType.NETWORK;
-                    errorMessage = "Problème réseau ou DNS";
-                } else if (e.getMessage() != null && e.getMessage().contains("401")) {
-                    errorType = ErrorType.AUTHENTICATION;
-                    errorMessage = "Clé API invalide";
-                } else if (e.getMessage() != null && e.getMessage().contains("400")) {
-                    errorType = ErrorType.BAD_REQUEST;
-                    errorMessage = "Mauvaise requête (400)";
-                } else if (e.getMessage() != null
-                        && (e.getMessage().contains("500") || e.getMessage().contains("503"))) {
-                    errorType = ErrorType.PROVIDER_DOWN;
-                    errorMessage = "Serveur du provider HS";
-                } else {
-                    errorType = ErrorType.UNKNOWN;
-                    errorMessage = e.getMessage() != null ? e.getMessage() : e.toString();
-                }
-            }
-
-            if (isUp) {
-                errorMessage = null;
-                errorType = null;
+                errorMessage = e.getMessage() != null ? e.getMessage() : e.toString();
+                log.error("Monitoring error for provider route {}", routeName(route), e);
             }
 
             double latencyMs = (System.nanoTime() - start) / 1_000_000.0;
-
-            // Calculate Failure Rate based on logs from the last 1 hour
-            LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
-            List<LogEntry> recentLogs = logEntryRepository
-                    .findByRouteUsedAndCreatedAtAfter(route.getName(), oneHourAgo);
-
-            if (!recentLogs.isEmpty()) {
-                long total = recentLogs.size();
-                long failed = recentLogs.stream()
-                        .filter(l -> l.getStatus() == LogStatus.FAILED).count();
-                double failureRate = (double) failed / total;
-                route.setFailureRate(failureRate);
-            } else {
-                route.setFailureRate(0.0);
-            }
-
-            route.setAvailability(isUp);
-            route.setLastErrorMessage(errorMessage);
-            route.setLastErrorType(errorType);
-            route.setAvgLatency(latencyMs);
+            route.setLastErrorMessage(isUp ? null : errorMessage);
+            List<LogEntry> recentLogs = recentLogs(routeName(route));
+            route.setAvgLatency(recentLogs.isEmpty() ? latencyMs : averageLatency(recentLogs));
+            route.setFailureRate(failureRate(recentLogs));
             routeRepository.save(route);
 
-            log.info("Route {} [{}] -> UP={}, latency={}ms, error={}, type={}",
-                    route.getName(), route.getProvider(), isUp, latencyMs, errorMessage, errorType);
+            log.info("Provider route {} -> UP={}, latency={}ms, error={}", routeName(route), isUp, latencyMs,
+                    errorMessage);
         }
     }
 
-    public List<Route> getAllRoutes() {
-        return routeRepository.findAll();
+    public List<MonitoringRouteResponse> getAllRoutes() {
+        return routeRepository.findAll().stream().map(this::toResponse).toList();
     }
 
-    public Route toggleRoute(Long id, boolean enabled) {
-        Route route = routeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Route non trouvée avec l'ID: " + id));
-        route.setAvailability(enabled);
-        return routeRepository.save(route);
+    public MonitoringRouteResponse toggleRoute(Long id, boolean enabled) {
+        PaymentProviderRoute route = routeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
+        route.setEnabled(enabled);
+        return toResponse(routeRepository.save(route));
+    }
+
+    private boolean isProviderAvailable(PaymentProviderRoute route) {
+        String providerCode = route.getProvider().getCode();
+        if ("KKIAPAY".equalsIgnoreCase(providerCode)) {
+            return kkiapayClient.isAvailable();
+        }
+        if ("PAYDUNYA".equalsIgnoreCase(providerCode)) {
+            return payDunyaClient.isAvailable();
+        }
+        log.warn("Unknown provider: {}", providerCode);
+        return false;
+    }
+
+    private List<LogEntry> recentLogs(String routeName) {
+        return logEntryRepository.findByRouteUsedAndCreatedAtAfter(routeName, LocalDateTime.now().minusHours(1));
+    }
+
+    private double averageLatency(List<LogEntry> recentLogs) {
+        return recentLogs.stream()
+                .map(LogEntry::getResponseTime)
+                .filter(responseTime -> responseTime != null)
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0);
+    }
+
+    private double failureRate(List<LogEntry> recentLogs) {
+        if (recentLogs.isEmpty()) {
+            return 0.0;
+        }
+        long failed = recentLogs.stream().filter(log -> log.getStatus() == LogStatus.FAILED).count();
+        return (double) failed / recentLogs.size();
+    }
+
+    private MonitoringRouteResponse toResponse(PaymentProviderRoute route) {
+        boolean available = route.isEnabled()
+                && route.getProvider().getStatus() == PaymentProviderStatus.ACTIVE;
+        return MonitoringRouteResponse.builder()
+                .id(route.getId())
+                .name(routeName(route))
+                .provider(route.getProvider().getCode())
+                .operator(route.getOperator())
+                .country(route.getCountry())
+                .availability(available)
+                .avgLatency(route.getAvgLatency())
+                .cost(route.getCost())
+                .failureRate(route.getFailureRate())
+                .priority(route.getPriority())
+                .lastErrorMessage(route.getLastErrorMessage())
+                .lastErrorType(available ? null : ErrorType.PROVIDER_DOWN)
+                .updatedAt(route.getUpdatedAt())
+                .build();
+    }
+
+    private String routeName(PaymentProviderRoute route) {
+        return route.getProvider().getCode() + "_" + route.getOperator() + "_" + route.getCountry();
     }
 }

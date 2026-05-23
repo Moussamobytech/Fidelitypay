@@ -1,7 +1,7 @@
 package com.Api.Fidelitypay.controller;
 
 import com.Api.Fidelitypay.model.LogEntry;
-import com.Api.Fidelitypay.model.Route;
+import com.Api.Fidelitypay.controller.dto.MonitoringRouteResponse;
 import com.Api.Fidelitypay.service.MonitoringService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,18 +22,18 @@ public class MonitoringController {
     private final MonitoringService monitoringService;
 
     @PostMapping("/check")
-    public ResponseEntity<List<Route>> triggerMonitoring() {
+    public ResponseEntity<List<MonitoringRouteResponse>> triggerMonitoring() {
         monitoringService.checkRoutes();
         return ResponseEntity.ok(monitoringService.getAllRoutes());
     }
 
     @GetMapping("/routes")
-    public ResponseEntity<List<Route>> getRoutes() {
+    public ResponseEntity<List<MonitoringRouteResponse>> getRoutes() {
         return ResponseEntity.ok(monitoringService.getAllRoutes());
     }
 
     @PostMapping("/routes/toggle")
-    public ResponseEntity<Route> toggleRoute(@RequestBody Map<String, Object> payload) {
+    public ResponseEntity<MonitoringRouteResponse> toggleRoute(@RequestBody Map<String, Object> payload) {
         Long id = Long.valueOf(payload.get("id").toString());
         boolean enabled = (boolean) payload.get("enabled");
         return ResponseEntity.ok(monitoringService.toggleRoute(id, enabled));
