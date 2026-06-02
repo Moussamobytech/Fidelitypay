@@ -85,6 +85,7 @@ public class SecurityConfig {
                                                 .requestMatchers("/actuator/**").permitAll()
                                                 .requestMatchers("/api/v1/developer/health").permitAll()
                                                 .requestMatchers("/api/payments/callback/**").permitAll()
+                                                .requestMatchers("/api/v1/providers/paydunya/**", "/api/v1/providers/kkiapay/**").permitAll()
                                                 .requestMatchers("/api/v1/payments/**").permitAll()
                                                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                                                 .requestMatchers(org.springframework.http.HttpMethod.POST,

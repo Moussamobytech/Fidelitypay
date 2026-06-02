@@ -3,6 +3,8 @@ package com.Api.Fidelitypay.repository;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,6 +24,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByUserId(@Param("userId") String userId);
 
     Optional<Payment> findByProviderPaymentId(String providerPaymentId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.providerPaymentId = :providerPaymentId")
+    Optional<Payment> findByProviderPaymentIdForUpdate(@Param("providerPaymentId") String providerPaymentId);
 
     List<Payment> findByStatus(PaymentStatus status);
 
