@@ -42,7 +42,8 @@ class PaymentServiceTest {
                 when(routeService.findAvailablePayIn(anyString(), anyString(), eq("LIVE"), any())).thenReturn(java.util.List.of(route1, route2));
 
                 paymentService = new PaymentService(paymentRepository, logEntryRepository,
-                                webhookService, kkiapayClient, payDunyaClient, routeService);
+                                webhookService, kkiapayClient, payDunyaClient, routeService,
+                                new com.Api.Fidelitypay.service.failure.PaymentFailureClassifier());
         }
 
         private com.Api.Fidelitypay.model.PaymentProviderRoute route(String code) {

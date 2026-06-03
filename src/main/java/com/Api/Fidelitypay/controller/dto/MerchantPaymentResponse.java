@@ -1,5 +1,7 @@
 package com.Api.Fidelitypay.controller.dto;
 
+import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import lombok.Builder;
 import lombok.Data;
@@ -19,6 +21,8 @@ public class MerchantPaymentResponse {
     private String currency;
     private NextAction nextAction;
     private String failureReason;
+    private ErrorType errorType;
+    private FailureStage failureStage;
 
     @Data
     @Builder

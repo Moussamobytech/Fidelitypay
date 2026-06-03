@@ -50,6 +50,8 @@ public class WebhookService {
                 .country(payment.getCountry())
                 .providerPaymentId(payment.getProviderPaymentId())
                 .failureReason(payment.getFailureReason())
+                .errorType(payment.getErrorType())
+                .failureStage(payment.getFailureStage())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
 

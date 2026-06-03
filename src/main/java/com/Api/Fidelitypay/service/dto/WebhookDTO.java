@@ -1,5 +1,7 @@
 package com.Api.Fidelitypay.service.dto;
 
+import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import lombok.Builder;
 import lombok.Data;
@@ -18,5 +20,7 @@ public class WebhookDTO {
     private String country;
     private String providerPaymentId;
     private String failureReason;
+    private ErrorType errorType;
+    private FailureStage failureStage;
     private LocalDateTime updatedAt;
 }

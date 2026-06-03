@@ -4,8 +4,12 @@ import com.Api.Fidelitypay.controller.dto.MerchantApiPrincipal;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentRequest;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentResponse;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.FailureReason;
+import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.enums.PaymentStatus;
+import com.Api.Fidelitypay.service.failure.PaymentFailure;
+import com.Api.Fidelitypay.service.failure.PaymentFailureClassifier;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.PayInProviderClient;
@@ -42,6 +46,7 @@ public class MerchantPayInService {
     private final PayDunyaClient payDunyaClient;
     private final WebhookService webhookService;
     private final MerchantProviderAccountService providerAccountService;
+    private final PaymentFailureClassifier failureClassifier;
 
     @Value("${payment.providers.allow-global-credentials-fallback:false}")
     private boolean allowGlobalCredentialsFallback;
@@ -88,10 +93,14 @@ public class MerchantPayInService {
         if (result.isSuccess()) {
             payment.setStatus(PaymentStatus.PENDING);
             payment.setNextActionType(null);
-            payment.setFailureReason(null);
+            failureClassifier.clear(payment);
         } else {
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason(determineFailureReason(result));
+            PaymentFailure failure = failureClassifier.classifyProviderResult(result, FailureStage.PROVIDER_ACTION);
+            if (failure.failureReason() == FailureReason.UNKNOWN) {
+                failure = failureClassifier.known(FailureReason.OTP_VALIDATION_FAILED, FailureStage.PROVIDER_ACTION);
+            }
+            failureClassifier.apply(payment, failure);
             webhookService.sendWebhook(payment);
         }
         paymentRepository.save(payment);
@@ -114,7 +123,7 @@ public class MerchantPayInService {
             } else if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && !callback.isPaymentSucces()) {
                 verifiedStatus = PaymentStatus.FAILED;
             }
-            applyProviderStatus(payment, verifiedStatus, "KKIAPAY_CALLBACK");
+            applyProviderStatus(payment, verifiedStatus);
         });
     }
 
@@ -138,7 +147,7 @@ public class MerchantPayInService {
                     default -> PaymentStatus.PENDING;
                 };
             }
-            applyProviderStatus(payment, verifiedStatus, "PAYDUNYA_CALLBACK");
+            applyProviderStatus(payment, verifiedStatus);
         });
     }
 
@@ -167,9 +176,10 @@ public class MerchantPayInService {
         List<PaymentProviderRoute> routes = routeService.findAvailablePayIn(country, operator, environment, principal.getUser().getId());
         if (routes.isEmpty()) {
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason(routeService.hasAnyPayInRoute(country, operator)
-                    ? "NO_PROVIDER_AVAILABLE_FOR_ENVIRONMENT"
-                    : "UNSUPPORTED_PAYIN_CAPABILITY");
+            FailureReason reason = routeService.hasAnyPayInRoute(country, operator)
+                    ? FailureReason.NO_PROVIDER_AVAILABLE_FOR_ENVIRONMENT
+                    : FailureReason.UNSUPPORTED_PAYIN_CAPABILITY;
+            failureClassifier.apply(payment, failureClassifier.known(reason, FailureStage.ROUTING));
             paymentRepository.save(payment);
             webhookService.sendWebhook(payment);
             return toResponse(payment);
@@ -214,7 +224,7 @@ public class MerchantPayInService {
                     payment.setStatus(PaymentStatus.PENDING);
                     payment.setNextActionType(null);
                 }
-                payment.setFailureReason(null);
+                failureClassifier.clear(payment);
                 paymentRepository.save(payment);
                 return toResponse(payment);
             }
@@ -222,7 +232,8 @@ public class MerchantPayInService {
             if (result.isProviderTransactionCreated()) {
                 payment.setProviderPaymentId(result.getProviderId());
                 payment.setStatus(PaymentStatus.PENDING_RECONCILIATION);
-                payment.setFailureReason("PROVIDER_RESULT_UNKNOWN");
+                failureClassifier.apply(payment, failureClassifier.known(
+                        FailureReason.PROVIDER_RESULT_UNKNOWN, FailureStage.RECONCILIATION));
                 paymentRepository.save(payment);
                 return toResponse(payment);
             }
@@ -234,7 +245,8 @@ public class MerchantPayInService {
 
         payment.setStatus(PaymentStatus.FAILED);
         payment.setProvider(finalRoute != null ? finalRoute.getProvider().getCode() : null);
-        payment.setFailureReason(determineFailureReason(finalResult));
+        failureClassifier.apply(payment,
+                failureClassifier.classifyProviderResult(finalResult, FailureStage.PROVIDER_INIT));
         payment.setRouteHealth("DEGRADED");
         paymentRepository.save(payment);
         webhookService.sendWebhook(payment);
@@ -250,8 +262,11 @@ public class MerchantPayInService {
         logEntry.setStatus(result != null && result.isSuccess()
                 ? LogStatus.SUCCESS
                 : result != null && result.isProviderTransactionCreated() ? LogStatus.PENDING : LogStatus.FAILED);
-        logEntry.setFailureReason(result != null && result.isSuccess() ? null : determineFailureReason(result));
-        logEntry.setErrorType(result == null ? null : result.getErrorType());
+        if (result != null && !result.isSuccess()) {
+            PaymentFailure failure = failureClassifier.classifyProviderResult(result, FailureStage.PROVIDER_INIT);
+            logEntry.setFailureReason(failure.reasonCode());
+            logEntry.setErrorType(failure.errorType());
+        }
         logEntry.setFallbackUsed(fallbackUsed);
         String message = result == null ? "No provider response" : result.getRawResponse();
         if (message != null && message.length() > 5000) {
@@ -309,28 +324,13 @@ public class MerchantPayInService {
                 || result.getErrorType() == ErrorType.PROVIDER_DOWN;
     }
 
-    private String determineFailureReason(PaymentResult result) {
-        if (result == null || result.getErrorType() == null) {
-            return "GENERIC_FAILURE";
-        }
-        return switch (result.getErrorType()) {
-            case AUTHENTICATION -> "AUTHENTICATION_FAILED";
-            case BAD_REQUEST -> "BAD_REQUEST";
-            case NETWORK -> "NETWORK_ERROR";
-            case TIMEOUT -> "TIMEOUT";
-            case PROVIDER_DOWN -> "PROVIDER_DOWN";
-            case INTERNAL_ERROR -> "INTERNAL_ERROR";
-            default -> "GENERIC_FAILURE";
-        };
-    }
-
-    private void applyProviderStatus(Payment payment, PaymentStatus status, String source) {
+    private void applyProviderStatus(Payment payment, PaymentStatus status) {
         payment.setStatus(status);
         payment.setUpdatedAt(LocalDateTime.now());
         if (status == PaymentStatus.SUCCESS) {
-            payment.setFailureReason(null);
+            failureClassifier.clear(payment);
         } else if (status == PaymentStatus.FAILED || status == PaymentStatus.CANCELLED) {
-            payment.setFailureReason(source + "_" + status.name());
+            failureClassifier.apply(payment, failureClassifier.classifyCallback(status));
         }
         paymentRepository.save(payment);
         if (isTerminal(status)) {
@@ -370,6 +370,8 @@ public class MerchantPayInService {
                 .currency(payment.getCurrency())
                 .nextAction(nextAction)
                 .failureReason(payment.getFailureReason())
+                .errorType(payment.getErrorType())
+                .failureStage(payment.getFailureStage())
                 .build();
     }
 

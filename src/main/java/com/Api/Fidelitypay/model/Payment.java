@@ -1,6 +1,7 @@
 package com.Api.Fidelitypay.model;
 
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.model.User;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -151,7 +152,12 @@ public class Payment {
     private String failureReason;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 30)
     private ErrorType errorType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private FailureStage failureStage;
 
     @CreationTimestamp
     @Column(updatable = false)

@@ -1,8 +1,12 @@
 package com.Api.Fidelitypay.service;
 
+import com.Api.Fidelitypay.enums.FailureReason;
+import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.service.failure.PaymentFailure;
+import com.Api.Fidelitypay.service.failure.PaymentFailureClassifier;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
@@ -34,6 +38,7 @@ public class PaymentService {
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
     private final PaymentRouteService routeService;
+    private final PaymentFailureClassifier failureClassifier;
 
     public PaymentService(
             PaymentRepository paymentRepository,
@@ -41,13 +46,15 @@ public class PaymentService {
             WebhookService webhookService,
             KkiapayClient kkiapayClient,
             PayDunyaClient payDunyaClient,
-            PaymentRouteService routeService) {
+            PaymentRouteService routeService,
+            PaymentFailureClassifier failureClassifier) {
         this.paymentRepository = paymentRepository;
         this.logEntryRepository = logEntryRepository;
         this.webhookService = webhookService;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
         this.routeService = routeService;
+        this.failureClassifier = failureClassifier;
     }
 
     /**
@@ -88,7 +95,8 @@ public class PaymentService {
         // Validation du numéro de téléphone par rapport au pays
         if (!isPhoneNumberValidForCountry(phone, countryCode)) {
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason("INVALID_PHONE_NUMBER");
+            failureClassifier.apply(payment,
+                    failureClassifier.known(FailureReason.INVALID_PHONE_NUMBER, FailureStage.VALIDATION));
             paymentRepository.save(payment);
             log.warn("Invalid phone number {} for country {}", phone, countryCode);
             return payment;
@@ -103,9 +111,13 @@ public class PaymentService {
                 .distinct()
                 .toList();
 
+        log.warn(":::::::::::::::: THE PROVIDERS = {} ", providersToTry);
+
+
         if (providersToTry.isEmpty()) {
             payment.setStatus(PaymentStatus.FAILED);
-            payment.setFailureReason("NO_PROVIDER_AVAILABLE_FOR_COUNTRY");
+            failureClassifier.apply(payment, failureClassifier.known(
+                    FailureReason.NO_PROVIDER_AVAILABLE_FOR_COUNTRY, FailureStage.ROUTING));
             paymentRepository.save(payment);
             log.warn("No providers configured in dashboard for country {} and operator {}", countryCode, operator);
             return payment;
@@ -147,8 +159,9 @@ public class PaymentService {
 
             // Log de l'échec
             logProviderAttempt(attempt == 1 ? "PRIMARY" : "FALLBACK", providerName, false, errorMsg, errorType);
-            saveLog(paymentId, providerName, result, false, determineFailureReason(errorMsg, errorType),
-                    errorType, attempt > 1, (attempt > 1 ? "MULTI_STEP_FALLBACK" : null), primaryProvider);
+            PaymentFailure attemptFailure = failureClassifier.classifyProviderResult(result, FailureStage.PROVIDER_INIT);
+            saveLog(paymentId, providerName, result, false, attemptFailure, attempt > 1,
+                    (attempt > 1 ? "MULTI_STEP_FALLBACK" : null), primaryProvider);
 
             // Est-ce une erreur technique permettant de continuer ?
             if (!shouldTriggerFallback(errorMsg, errorType)) {
@@ -205,20 +218,21 @@ public class PaymentService {
             }
             
             payment.setProviderResponseTimeMs((long) finalResult.getResponseTimeMs());
-            payment.setErrorType(finalResult.getErrorType());
 
             if (success) {
-                payment.setFailureReason(null);
+                failureClassifier.clear(payment);
             } else {
-                payment.setFailureReason(
-                        determineFailureReason(finalResult.getRawResponse(), finalResult.getErrorType()));
+                failureClassifier.apply(payment,
+                        failureClassifier.classifyProviderResult(finalResult, FailureStage.PROVIDER_INIT));
             }
         }
 
         paymentRepository.save(payment);
 
-        saveLog(paymentId, finalProviderUsed, finalResult, success, payment.getFailureReason(),
-                payment.getErrorType(), payment.isUsedFallback(), payment.getFallbackReason(), primaryProvider);
+        PaymentFailure finalFailure = success ? null
+                : failureClassifier.classifyProviderResult(finalResult, FailureStage.PROVIDER_INIT);
+        saveLog(paymentId, finalProviderUsed, finalResult, success, finalFailure, payment.isUsedFallback(),
+                payment.getFallbackReason(), primaryProvider);
 
         if (payment.getStatus() == PaymentStatus.FAILED) {
             webhookService.sendWebhook(payment);
@@ -273,8 +287,7 @@ public class PaymentService {
     }
 
     private void saveLog(String paymentId, String providerUsed, PaymentResult result, boolean success,
-            String failureReason, ErrorType errorType, boolean fallbackUsed, String fallbackReason,
-            String primaryProvider) {
+            PaymentFailure failure, boolean fallbackUsed, String fallbackReason, String primaryProvider) {
         try {
             LogEntry logEntry = new LogEntry();
             logEntry.setPaymentId(paymentId);
@@ -282,8 +295,10 @@ public class PaymentService {
             logEntry.setProvider(providerUsed != null ? providerUsed : "UNKNOWN");
             logEntry.setResponseTime(result != null ? result.getResponseTimeMs() : 0.0);
             logEntry.setStatus(success ? LogStatus.SUCCESS : LogStatus.FAILED);
-            logEntry.setFailureReason(failureReason);
-            logEntry.setErrorType(errorType);
+            if (failure != null) {
+                logEntry.setFailureReason(failure.reasonCode());
+                logEntry.setErrorType(failure.errorType());
+            }
             logEntry.setFallbackUsed(fallbackUsed);
 
             StringBuilder messageBuilder = new StringBuilder();
@@ -304,47 +319,6 @@ public class PaymentService {
         } catch (Exception e) {
             log.error("Failed to save log for payment {}", paymentId, e);
         }
-    }
-
-    private String determineFailureReason(String errorMessage, ErrorType errorType) {
-        if (errorMessage == null)
-            return "UNKNOWN_ERROR";
-
-        if (errorType != null) {
-            switch (errorType) {
-                case AUTHENTICATION:
-                    return "AUTHENTICATION_FAILED";
-                case TIMEOUT:
-                    return "TIMEOUT";
-                case NETWORK:
-                    return "NETWORK_ERROR";
-                case PROVIDER_DOWN:
-                    return "PROVIDER_DOWN";
-                case BAD_REQUEST:
-                    return "BAD_REQUEST";
-                case INTERNAL_ERROR:
-                    return "INTERNAL_ERROR";
-                case UNKNOWN:
-                default:
-                    return "GENERIC_FAILURE";
-            }
-        }
-
-        String error = errorMessage.toUpperCase();
-        if (error.contains("SOLDE") || error.contains("INSUFFICIENT") || error.contains("FUNDS"))
-            return "INSUFFICIENT_FUNDS";
-        if (error.contains("TIMEOUT") || error.contains("TIME_OUT"))
-            return "TIMEOUT";
-        if (error.contains("PHONE") || error.contains("NUMBER") || error.contains("INVALID PHONE"))
-            return "INVALID_PHONE_NUMBER";
-        if (error.contains("PAYMENT CHANNEL") || error.contains("INVALID_OPERATOR") || error.contains("NOT A VALID PAYMENT CHANNEL"))
-            return "INVALID_OPERATOR";
-        if (error.contains("AUTH") || error.contains("TOKEN") || error.contains("401"))
-            return "AUTHENTICATION_FAILED";
-        if (error.contains("CANCEL"))
-            return "CANCELLED_BY_USER";
-
-        return "GENERIC_FAILURE";
     }
 
     private boolean shouldTriggerFallback(String errorMessage, ErrorType errorType) {
@@ -436,7 +410,11 @@ public class PaymentService {
             }
 
             payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
-            payment.setFailureReason(success ? null : "PROVIDER_REPORTED_FAILURE");
+            if (success) {
+                failureClassifier.clear(payment);
+            } else {
+                failureClassifier.apply(payment, failureClassifier.classifyCallback(PaymentStatus.FAILED));
+            }
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
 

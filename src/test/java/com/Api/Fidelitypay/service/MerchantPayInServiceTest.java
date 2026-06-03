@@ -56,7 +56,7 @@ class MerchantPayInServiceTest {
         webhookService = mock(WebhookService.class);
         providerAccountService = mock(MerchantProviderAccountService.class);
         service = new MerchantPayInService(paymentRepository, logEntryRepository, routeService, kkiapayClient, payDunyaClient, webhookService,
-                providerAccountService);
+                providerAccountService, new com.Api.Fidelitypay.service.failure.PaymentFailureClassifier());
         ReflectionTestUtils.setField(service, "allowGlobalCredentialsFallback", true);
 
         User user = User.builder()

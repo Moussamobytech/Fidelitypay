@@ -3,11 +3,11 @@ package com.Api.Fidelitypay.service;
 import com.Api.Fidelitypay.enums.PaymentDirection;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
+import com.Api.Fidelitypay.service.routing.RouteScoreCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +19,7 @@ public class PaymentRouteService {
     private final PaymentProviderRouteRepository routeRepository;
     private final MerchantPaymentRouteSettingService routeSettingService;
     private final MerchantProviderAccountService accountService;
+    private final RouteScoreCalculator routeScoreCalculator;
 
     @Value("${payment.providers.allow-global-credentials-fallback:false}")
     private boolean allowGlobalCredentialsFallback;
@@ -37,7 +38,7 @@ public class PaymentRouteService {
                 .filter(route -> !disabledRouteIds.contains(route.getId()))
                 .filter(route -> allowGlobalCredentialsFallback || accountService.getEnabledAccount(merchantUserId,
                         route.getProvider().getId(), normalizedEnvironment) != null)
-                .sorted(Comparator.comparingDouble(route -> score(route, merchantPriorities.get(route.getId()))))
+                .sorted(routeScoreCalculator.comparator(merchantPriorities))
                 .toList();
     }
 
@@ -50,14 +51,6 @@ public class PaymentRouteService {
                 PaymentDirection.PAYIN,
                 normalize(country),
                 normalize(operator)).isEmpty();
-    }
-
-    public static double score(PaymentProviderRoute route, Integer merchantPriority) {
-        int effectivePriority = merchantPriority == null ? route.getPriority() : merchantPriority;
-        return effectivePriority
-                + route.getCost() * 0.5
-                + route.getAvgLatency() * 0.3 / 1000.0
-                + route.getFailureRate() * 0.2;
     }
 
     private String normalize(String value) {

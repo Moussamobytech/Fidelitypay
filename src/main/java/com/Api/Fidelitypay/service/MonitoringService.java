@@ -40,7 +40,7 @@ public class MonitoringService {
 
     @Scheduled(fixedRateString = "${monitoring.interval:300000}")
     public void checkRoutes() {
-        for (PaymentProviderRoute route : routeRepository.findAll()) {
+        for (PaymentProviderRoute route : routeRepository.findAllWithProvider()) {
             long start = System.nanoTime();
             boolean isUp;
             String errorMessage = null;
@@ -61,6 +61,7 @@ public class MonitoringService {
             List<LogEntry> recentLogs = recentLogs(routeName(route));
             route.setAvgLatency(recentLogs.isEmpty() ? latencyMs : averageLatency(recentLogs));
             route.setFailureRate(failureRate(recentLogs));
+            route.setMetricsSampleCount(recentLogs.size());
             routeRepository.save(route);
 
             log.info("Provider route {} -> UP={}, latency={}ms, error={}", routeName(route), isUp, latencyMs,
@@ -69,11 +70,11 @@ public class MonitoringService {
     }
 
     public List<MonitoringRouteResponse> getAllRoutes() {
-        return routeRepository.findAll().stream().map(this::toResponse).toList();
+        return routeRepository.findAllWithProvider().stream().map(this::toResponse).toList();
     }
 
     public MonitoringRouteResponse toggleRoute(Long id, boolean enabled) {
-        PaymentProviderRoute route = routeRepository.findById(id)
+        PaymentProviderRoute route = routeRepository.findByIdWithProvider(id)
                 .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
         route.setEnabled(enabled);
         return toResponse(routeRepository.save(route));
