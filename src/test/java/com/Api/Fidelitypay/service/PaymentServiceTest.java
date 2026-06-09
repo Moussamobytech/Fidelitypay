@@ -1,7 +1,9 @@
 package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.PaymentFlowType;
 import com.Api.Fidelitypay.enums.PaymentStatus;
+import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
@@ -11,6 +13,7 @@ import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -51,6 +54,10 @@ class PaymentServiceTest {
                 provider.setCode(code);
                 com.Api.Fidelitypay.model.PaymentProviderRoute route = new com.Api.Fidelitypay.model.PaymentProviderRoute();
                 route.setProvider(provider);
+                route.setCountry("BJ");
+                route.setOperator("MTN");
+                route.setFlowType("PAYDUNYA".equals(code) ? PaymentFlowType.HOSTED_CHECKOUT : PaymentFlowType.MOBILE_MONEY_REQUEST);
+                route.setProviderChannel("PAYDUNYA".equals(code) ? "mtn-benin" : "momo");
                 return route;
         }
 
@@ -62,8 +69,7 @@ class PaymentServiceTest {
                 pr.setRawResponse("{\"status\":\"ok\"}");
                 pr.setResponseTimeMs(150.0);
 
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(pr);
+                when(kkiapayClient.initiatePayIn(any(PayInProviderRequest.class))).thenReturn(pr);
 
                 when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -78,6 +84,11 @@ class PaymentServiceTest {
                 assertFalse(res.isUsedFallback());
                 verify(paymentRepository, atLeastOnce()).save(any());
                 verify(webhookService, never()).sendWebhook(any(Payment.class));
+
+                ArgumentCaptor<PayInProviderRequest> requestCaptor = ArgumentCaptor.forClass(PayInProviderRequest.class);
+                verify(kkiapayClient).initiatePayIn(requestCaptor.capture());
+                assertEquals(res.getPaymentId(), requestCaptor.getValue().getPaymentId());
+                assertEquals(PaymentFlowType.MOBILE_MONEY_REQUEST, requestCaptor.getValue().getFlowType());
         }
 
         @Test
@@ -87,16 +98,14 @@ class PaymentServiceTest {
                 kkiapayResult.setRawResponse("TIMEOUT: Connection failed");
                 kkiapayResult.setResponseTimeMs(3000.0);
                 kkiapayResult.setErrorType(ErrorType.TIMEOUT);
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(kkiapayResult);
+                when(kkiapayClient.initiatePayIn(any(PayInProviderRequest.class))).thenReturn(kkiapayResult);
 
                 // PAYDUNYA réussit (fallback)
                 PaymentResult paydunyaResult = new PaymentResult(true);
                 paydunyaResult.setProviderId("paydunya-success-456");
                 paydunyaResult.setRawResponse("{\"status\":\"success\"}");
                 paydunyaResult.setResponseTimeMs(200.0);
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(paydunyaResult);
+                when(payDunyaClient.initiatePayIn(any(PayInProviderRequest.class))).thenReturn(paydunyaResult);
 
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -111,10 +120,8 @@ class PaymentServiceTest {
                 assertTrue(res.isUsedFallback());
                 verify(webhookService, never()).sendWebhook(any(Payment.class));
 
-                verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
-                verify(payDunyaClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
+                verify(kkiapayClient).initiatePayIn(any(PayInProviderRequest.class));
+                verify(payDunyaClient).initiatePayIn(any(PayInProviderRequest.class));
         }
 
         @Test
@@ -123,10 +130,8 @@ class PaymentServiceTest {
                 failResult.setRawResponse("Erreur: Solde insuffisant pour la transaction");
                 failResult.setResponseTimeMs(100.0);
 
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(failResult);
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(failResult);
+                when(kkiapayClient.initiatePayIn(any(PayInProviderRequest.class))).thenReturn(failResult);
+                when(payDunyaClient.initiatePayIn(any(PayInProviderRequest.class))).thenReturn(failResult);
 
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 

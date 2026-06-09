@@ -5,9 +5,11 @@ import com.Api.Fidelitypay.enums.FailureStage;
 import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.enums.ErrorType;
+import com.Api.Fidelitypay.enums.PaymentFlowType;
 import com.Api.Fidelitypay.service.failure.PaymentFailure;
 import com.Api.Fidelitypay.service.failure.PaymentFailureClassifier;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
+import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
@@ -103,11 +105,10 @@ public class PaymentService {
         }
 
         // 2. Use the same scored provider-route catalog as the merchant API flow.
-        List<String> providersToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
-                        user == null ? null : user.getId())
-                .stream()
-                .map(PaymentProviderRoute::getProvider)
-                .map(provider -> provider.getCode())
+        List<PaymentProviderRoute> routesToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
+                user == null ? null : user.getId());
+        List<String> providersToTry = routesToTry.stream()
+                .map(this::providerCode)
                 .distinct()
                 .toList();
 
@@ -125,23 +126,26 @@ public class PaymentService {
 
         PaymentResult finalResult = null;
         String finalProviderUsed = null;
+        PaymentProviderRoute finalRouteUsed = null;
         boolean success = false;
         int attempt = 0;
-        String primaryProvider = providersToTry.get(0);
+        String primaryProvider = providerCode(routesToTry.get(0));
         boolean fallbackNeededButUnavailable = false;  // ✅ FIX: Track if fallback was needed but no providers left
 
         // 3. Boucle de fallback (essaye chaque provider)
-        for (String providerName : providersToTry) {
+        for (PaymentProviderRoute route : routesToTry) {
             attempt++;
+            String providerName = providerCode(route);
             log.info("🚀 Attempt {}: Trying provider {} for payment {}",
                     attempt, providerName, paymentId);
 
-            PaymentResult result = executeProvider(providerName, amount, countryCode, operator, phone, firstname, lastname, email);
+            PaymentResult result = executeProvider(route, paymentId, amount, countryCode, operator, phone, firstname, lastname, email);
 
             if (result != null && result.isSuccess()) {
                 success = true;
                 finalResult = result;
                 finalProviderUsed = providerName;
+                finalRouteUsed = route;
                 payment.setUsedFallback(attempt > 1);
                 payment.setAttemptCount(attempt);
                 if (attempt > 1) {
@@ -168,11 +172,12 @@ public class PaymentService {
                 log.warn("❌ Stop fallback: Non-technical error encountered: {}", errorMsg);
                 finalResult = result;
                 finalProviderUsed = providerName;
+                finalRouteUsed = route;
                 break;
             }
 
             // ✅ FIX: Mark if fallback was needed but no more providers available
-            if (attempt >= providersToTry.size()) {
+            if (attempt >= routesToTry.size()) {
                 log.error("❌ All providers failed for operator {}. No fallback available.", operator);
                 fallbackNeededButUnavailable = true;
             } else {
@@ -181,6 +186,7 @@ public class PaymentService {
 
             finalResult = result;
             finalProviderUsed = providerName;
+            finalRouteUsed = route;
         }
 
         // 4. Finaliser l'initialisation.
@@ -198,8 +204,12 @@ public class PaymentService {
         }
 
         if (finalProviderUsed != null) {
-            payment.setRouteName(finalProviderUsed);
+            payment.setRouteName(finalRouteUsed != null ? routeName(finalRouteUsed) : finalProviderUsed);
             payment.setProvider(finalProviderUsed);
+            if (finalRouteUsed != null) {
+                payment.setProviderChannel(finalRouteUsed.getProviderChannel());
+                payment.setFlowType(finalRouteUsed.getFlowType() != null ? finalRouteUsed.getFlowType().name() : null);
+            }
             payment.setCost(BigDecimal.ZERO);
 
             String health = success ? "HEALTHY"
@@ -262,17 +272,31 @@ public class PaymentService {
         return true;
     }
 
-    private PaymentResult executeProvider(String providerName, double amount, String country, String operator, String phone,
+    private PaymentResult executeProvider(PaymentProviderRoute route, String paymentId, double amount, String country,
+            String operator, String phone,
             String firstname, String lastname, String email) {
+        String providerName = providerCode(route);
         if (providerName == null)
             return null;
 
         try {
+            PayInProviderRequest request = PayInProviderRequest.builder()
+                    .paymentId(paymentId)
+                    .amount((long) amount)
+                    .country(country)
+                    .operator(operator)
+                    .providerChannel(route.getProviderChannel())
+                    .flowType(resolveFlowType(providerName, route.getFlowType(), operator))
+                    .phone(phone)
+                    .firstname(firstname)
+                    .lastname(lastname)
+                    .email(email)
+                    .build();
             switch (providerName.toUpperCase()) {
                 case "KKIAPAY":
-                    return kkiapayClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
+                    return kkiapayClient.initiatePayIn(request);
                 case "PAYDUNYA":
-                    return payDunyaClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
+                    return payDunyaClient.initiatePayIn(request);
                 default:
                     log.warn("Unsupported provider {}", providerName);
                     return null;
@@ -284,6 +308,26 @@ public class PaymentService {
             error.setErrorType(ErrorType.INTERNAL_ERROR);
             return error;
         }
+    }
+
+    private String providerCode(PaymentProviderRoute route) {
+        return route != null && route.getProvider() != null ? route.getProvider().getCode() : null;
+    }
+
+    private PaymentFlowType resolveFlowType(String providerName, PaymentFlowType routeFlowType, String operator) {
+        if (routeFlowType != null) {
+            return routeFlowType;
+        }
+        if ("PAYDUNYA".equalsIgnoreCase(providerName)) {
+            return PaymentFlowType.HOSTED_CHECKOUT;
+        }
+        return "WAVE".equalsIgnoreCase(operator)
+                ? PaymentFlowType.WAVE_REDIRECT
+                : PaymentFlowType.MOBILE_MONEY_REQUEST;
+    }
+
+    private String routeName(PaymentProviderRoute route) {
+        return providerCode(route) + "_" + route.getOperator() + "_" + route.getCountry();
     }
 
     private void saveLog(String paymentId, String providerUsed, PaymentResult result, boolean success,

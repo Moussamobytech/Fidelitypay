@@ -90,7 +90,7 @@ public class KkiapayClient implements PayInProviderClient {
 
             Object payload = isWave ? wavePayload(request) : mobileMoneyPayload(request);
             log.info("Kkiapay Attempt | URL={} | publicKey={} | payload={}",
-                    baseUrl, mask(resolvePublicKey(request.getCredentials())), objectMapper.writeValueAsString(payload));
+                    baseUrl + endpoint, mask(resolvePublicKey(request.getCredentials())), objectMapper.writeValueAsString(payload));
 
             ResponseEntity<String> response = restTemplate.postForEntity(
                     baseUrl + endpoint,

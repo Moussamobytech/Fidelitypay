@@ -6,7 +6,7 @@ import lombok.Data;
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class KkiapayWaveRequestDTO {
-    private double amount;
+    private long amount;
     private String email;
     private String country;
     private String name;
