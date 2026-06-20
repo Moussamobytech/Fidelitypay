@@ -65,7 +65,7 @@ public class WebhookService {
             }
         }
 
-        log.warn("No developer webhook configured for event {}, skipping payment {}", event, payment.getPaymentId());
+         log.warn("No developer webhook configured for event {}, skipping payment {}", event, payment.getPaymentId());
     }
 
     private void sendDeveloperWebhook(Webhook webhook, WebhookDTO payload, String paymentId) {

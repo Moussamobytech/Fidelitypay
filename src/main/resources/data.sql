@@ -10,30 +10,62 @@ INSERT IGNORE INTO payment_provider_routes
 SELECT pp.id, seed.direction, seed.country, seed.operator, seed.flow_type, seed.environment, seed.provider_channel,
        seed.enabled, seed.priority, seed.cost, seed.avg_latency, seed.failure_rate, CURRENT_TIMESTAMP(6)
 FROM (
-SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MTN', 'MOBILE_MONEY_REQUEST', 'LIVE', 'mtn-benin', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-benin', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'CELTIIS', 'MOBILE_MONEY_REQUEST', 'LIVE', 'celtiis-benin', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MTN', 'MOBILE_MONEY_REQUEST', 'LIVE', 'mtn-ci', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-ci', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'OM', 'ORANGE_CI_OTP', 'LIVE', 'orange-money-ci', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'WAVE', 'WAVE_REDIRECT', 'LIVE', 'wave-ci', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-togo', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MIXX', 'MOBILE_MONEY_REQUEST', 'LIVE', 't-money-togo', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'OM', 'MOBILE_MONEY_REQUEST', 'LIVE', 'orange-money-senegal', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'MIXX', 'MOBILE_MONEY_REQUEST', 'LIVE', 'free-money-senegal', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'WAVE', 'WAVE_REDIRECT', 'LIVE', 'wave-senegal', true, 10, 0, 0, 0
-UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'NE', 'AIRTEL', 'MOBILE_MONEY_REQUEST', 'LIVE', 'airtel-niger', true, 10, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'OM', 'HOSTED_CHECKOUT', 'LIVE', 'orange-money-senegal', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'WAVE', 'HOSTED_CHECKOUT', 'LIVE', 'wave-senegal', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'MIXX', 'HOSTED_CHECKOUT', 'LIVE', 'free-money-senegal', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'EXPRESSO', 'HOSTED_CHECKOUT', 'LIVE', 'expresso-sn', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'OM', 'HOSTED_CHECKOUT', 'LIVE', 'orange-money-ci', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MTN', 'HOSTED_CHECKOUT', 'LIVE', 'mtn-ci', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-ci', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'WAVE', 'HOSTED_CHECKOUT', 'LIVE', 'wave-ci', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MTN', 'HOSTED_CHECKOUT', 'LIVE', 'mtn-benin', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-benin', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-togo', true, 20, 0, 0, 0
-UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MIXX', 'HOSTED_CHECKOUT', 'LIVE', 't-money-togo', true, 20, 0, 0, 0
+-- Lignes LIVE (Commentées pour les tests)
+-- SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MTN', 'MOBILE_MONEY_REQUEST', 'LIVE', 'mtn-benin', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-benin', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'CELTIIS', 'MOBILE_MONEY_REQUEST', 'LIVE', 'celtiis-benin', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MTN', 'MOBILE_MONEY_REQUEST', 'LIVE', 'mtn-ci', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-ci', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'OM', 'ORANGE_CI_OTP', 'LIVE', 'orange-money-ci', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'WAVE', 'WAVE_REDIRECT', 'LIVE', 'wave-ci', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MOOV', 'MOBILE_MONEY_REQUEST', 'LIVE', 'moov-togo', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MIXX', 'MOBILE_MONEY_REQUEST', 'LIVE', 't-money-togo', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'WAVE', 'WAVE_REDIRECT', 'LIVE', 'wave-togo', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'OM', 'MOBILE_MONEY_REQUEST', 'LIVE', 'orange-money-senegal', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'MIXX', 'MOBILE_MONEY_REQUEST', 'LIVE', 'free-money-senegal', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'WAVE', 'WAVE_REDIRECT', 'LIVE', 'wave-senegal', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'NE', 'AIRTEL', 'MOBILE_MONEY_REQUEST', 'LIVE', 'airtel-niger', true, 10, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'OM', 'HOSTED_CHECKOUT', 'LIVE', 'orange-money-senegal', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'WAVE', 'HOSTED_CHECKOUT', 'LIVE', 'wave-senegal', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'MIXX', 'HOSTED_CHECKOUT', 'LIVE', 'free-money-senegal', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'EXPRESSO', 'HOSTED_CHECKOUT', 'LIVE', 'expresso-sn', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'OM', 'HOSTED_CHECKOUT', 'LIVE', 'orange-money-ci', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MTN', 'HOSTED_CHECKOUT', 'LIVE', 'mtn-ci', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-ci', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'WAVE', 'HOSTED_CHECKOUT', 'LIVE', 'wave-ci', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MTN', 'HOSTED_CHECKOUT', 'LIVE', 'mtn-benin', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-benin', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MOOV', 'HOSTED_CHECKOUT', 'LIVE', 'moov-togo', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MIXX', 'HOSTED_CHECKOUT', 'LIVE', 't-money-togo', true, 20, 0, 0, 0
+-- UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'WAVE', 'HOSTED_CHECKOUT', 'LIVE', 'wave-togo', true, 20, 0, 0, 0
+
+-- Lignes pour l'environnement de TEST
+SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MTN', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'mtn-benin', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'MOOV', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'moov-benin', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'BJ', 'CELTIIS', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'celtiis-benin', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MTN', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'mtn-ci', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'MOOV', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'moov-ci', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'OM', 'ORANGE_CI_OTP', 'SANDBOX', 'orange-money-ci', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'CI', 'WAVE', 'WAVE_REDIRECT', 'SANDBOX', 'wave-ci', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MOOV', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'moov-togo', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'MIXX', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 't-money-togo', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'TG', 'WAVE', 'WAVE_REDIRECT', 'SANDBOX', 'wave-togo', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'OM', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'orange-money-senegal', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'MIXX', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'free-money-senegal', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'SN', 'WAVE', 'WAVE_REDIRECT', 'SANDBOX', 'wave-senegal', true, 10, 0, 0, 0
+UNION ALL SELECT 'KKIAPAY', 'PAYIN', 'NE', 'AIRTEL', 'MOBILE_MONEY_REQUEST', 'SANDBOX', 'airtel-niger', true, 10, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'OM', 'HOSTED_CHECKOUT', 'SANDBOX', 'orange-money-senegal', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'WAVE', 'HOSTED_CHECKOUT', 'SANDBOX', 'wave-senegal', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'MIXX', 'HOSTED_CHECKOUT', 'SANDBOX', 'free-money-senegal', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'SN', 'EXPRESSO', 'HOSTED_CHECKOUT', 'SANDBOX', 'expresso-sn', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'OM', 'HOSTED_CHECKOUT', 'SANDBOX', 'orange-money-ci', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MTN', 'HOSTED_CHECKOUT', 'SANDBOX', 'mtn-ci', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'MOOV', 'HOSTED_CHECKOUT', 'SANDBOX', 'moov-ci', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'CI', 'WAVE', 'HOSTED_CHECKOUT', 'SANDBOX', 'wave-ci', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MTN', 'HOSTED_CHECKOUT', 'SANDBOX', 'mtn-benin', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'BJ', 'MOOV', 'HOSTED_CHECKOUT', 'SANDBOX', 'moov-benin', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MOOV', 'HOSTED_CHECKOUT', 'SANDBOX', 'moov-togo', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'MIXX', 'HOSTED_CHECKOUT', 'SANDBOX', 't-money-togo', true, 20, 0, 0, 0
+UNION ALL SELECT 'PAYDUNYA', 'PAYIN', 'TG', 'WAVE', 'HOSTED_CHECKOUT', 'SANDBOX', 'wave-togo', true, 20, 0, 0, 0
 ) seed(provider, direction, country, operator, flow_type, environment, provider_channel, enabled, priority, cost, avg_latency, failure_rate)
 JOIN payment_providers pp ON pp.code = seed.provider;

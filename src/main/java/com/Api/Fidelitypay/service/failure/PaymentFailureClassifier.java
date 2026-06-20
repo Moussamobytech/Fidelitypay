@@ -110,15 +110,18 @@ public class PaymentFailureClassifier {
     private ErrorType errorTypeFor(FailureReason reason) {
         return switch (reason) {
             case AUTHENTICATION_FAILED -> ErrorType.AUTHENTICATION;
-            case TIMEOUT -> ErrorType.TIMEOUT;
+            case TIMEOUT, PENDING_TOO_LONG -> ErrorType.TIMEOUT;
             case NETWORK_ERROR -> ErrorType.NETWORK;
             case PROVIDER_DOWN -> ErrorType.PROVIDER_DOWN;
-            case BAD_REQUEST, INVALID_OPERATOR, INVALID_PHONE_NUMBER -> ErrorType.BAD_REQUEST;
-            case INTERNAL_ERROR, OTP_VALIDATION_FAILED -> ErrorType.INTERNAL_ERROR;
+            case BAD_REQUEST, INVALID_OPERATOR, INVALID_PHONE_NUMBER,
+                    CARD_EXPIRED, INVALID_CARD_DETAILS, CURRENCY_NOT_SUPPORTED,
+                    DUPLICATE_TRANSACTION, LIMIT_EXCEEDED -> ErrorType.BAD_REQUEST;
+            case INTERNAL_ERROR, OTP_VALIDATION_FAILED, PROVIDER_CONFIGURATION_ERROR -> ErrorType.INTERNAL_ERROR;
             case INSUFFICIENT_FUNDS, CANCELLED_BY_USER, PROVIDER_REPORTED_FAILURE,
                     PROVIDER_RESULT_UNKNOWN, NO_PROVIDER_AVAILABLE_FOR_COUNTRY,
                     NO_PROVIDER_AVAILABLE_FOR_ENVIRONMENT, UNSUPPORTED_PAYIN_CAPABILITY,
-                    NO_FALLBACK_PROVIDER_AVAILABLE -> ErrorType.UNKNOWN;
+                    NO_FALLBACK_PROVIDER_AVAILABLE, CUSTOMER_NOT_REACHABLE,
+                    PAYMENT_ABANDONED, PAYMENT_EXPIRED, CARD_DECLINED -> ErrorType.UNKNOWN;
             case UNKNOWN -> ErrorType.UNKNOWN;
         };
     }

@@ -105,7 +105,7 @@ public class PaymentService {
         }
 
         // 2. Use the same scored provider-route catalog as the merchant API flow.
-        List<PaymentProviderRoute> routesToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
+        List<PaymentProviderRoute> routesToTry = routeService.findAvailablePayIn(countryCode, operator, "SANDBOX",
                 user == null ? null : user.getId());
         List<String> providersToTry = routesToTry.stream()
                 .map(this::providerCode)

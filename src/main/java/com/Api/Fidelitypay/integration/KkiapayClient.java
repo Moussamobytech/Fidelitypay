@@ -87,6 +87,10 @@ public class KkiapayClient implements PayInProviderClient {
             if (privateKey != null && !privateKey.isBlank()) {
                 headers.set("x-private-key", privateKey);
             }
+            String secretKey = resolveSecretKey(request.getCredentials());
+            if (secretKey != null && !secretKey.isBlank()) {
+                headers.set("x-secret-key", secretKey);
+            }
 
             Object payload = isWave ? wavePayload(request) : mobileMoneyPayload(request);
             log.info("Kkiapay Attempt | URL={} | publicKey={} | payload={}",
@@ -160,6 +164,10 @@ public class KkiapayClient implements PayInProviderClient {
             if (privateKey != null && !privateKey.isBlank()) {
                 headers.set("x-private-key", privateKey);
             }
+            String secretKey = resolveSecretKey(credentials);
+            if (secretKey != null && !secretKey.isBlank()) {
+                headers.set("x-secret-key", secretKey);
+            }
             Map<String, Object> payload = Map.of(
                     "transactionId", payment.getProviderPaymentId(),
                     "otp", value,
@@ -217,6 +225,10 @@ public class KkiapayClient implements PayInProviderClient {
             if (privateKey != null && !privateKey.isBlank()) {
                 headers.set("x-private-key", privateKey);
             }
+            String secretKey = resolveSecretKey(credentials);
+            if (secretKey != null && !secretKey.isBlank()) {
+                headers.set("x-secret-key", secretKey);
+            }
 
             String payload = "{\"transactionId\":\"" + transactionId + "\"}";
             ResponseEntity<KkiapayResponseDTO> response = restTemplate.postForEntity(
@@ -242,6 +254,8 @@ public class KkiapayClient implements PayInProviderClient {
         payload.setReason("FidelityPay payment " + nonBlank(request.getPaymentId(), ""));
         payload.setSuccess_url(request.getReturnUrl() != null ? request.getReturnUrl() : resolveCallbackUrl(request));
         payload.setError_url(request.getCancelUrl() != null ? request.getCancelUrl() : resolveCallbackUrl(request));
+        // Required by Kkiapay Wave API: must be the merchant's public API key
+        payload.setToken(resolvePublicKey(request.getCredentials()));
         return payload;
     }
 
@@ -346,6 +360,12 @@ public class KkiapayClient implements PayInProviderClient {
         return credentials != null && credentials.privateKey() != null
                 ? credentials.privateKey()
                 : kkiapayProperties.getApi().getPrivateKey();
+    }
+
+    private String resolveSecretKey(ProviderCredentials credentials) {
+        return credentials != null && credentials.secretKey() != null
+                ? credentials.secretKey()
+                : kkiapayProperties.getApi().getSecretKey();
     }
 
     private String resolveCallbackUrl(PayInProviderRequest request) {
