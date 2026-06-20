@@ -5,6 +5,7 @@ import com.Api.Fidelitypay.model.MerchantProviderAccount;
 import com.Api.Fidelitypay.model.PaymentProvider;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
+import com.Api.Fidelitypay.service.routing.RouteScoreCalculator;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,7 +23,8 @@ class PaymentRouteServiceTest {
         PaymentProviderRouteRepository routeRepository = mock(PaymentProviderRouteRepository.class);
         MerchantPaymentRouteSettingService settingService = mock(MerchantPaymentRouteSettingService.class);
         MerchantProviderAccountService accountService = mock(MerchantProviderAccountService.class);
-        PaymentRouteService service = new PaymentRouteService(routeRepository, settingService, accountService);
+        PaymentRouteService service = new PaymentRouteService(routeRepository, settingService, accountService,
+                new RouteScoreCalculator());
 
         PaymentProviderRoute liveOnly = route(1L, true, false);
         PaymentProviderRoute sandboxOnly = route(2L, false, true);

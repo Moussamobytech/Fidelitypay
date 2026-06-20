@@ -82,6 +82,9 @@ public class PaymentProviderRoute {
     @Column(nullable = false)
     private double failureRate = 0.0;
 
+    @Column(nullable = false)
+    private int metricsSampleCount = 0;
+
     @Column(length = 500)
     private String lastErrorMessage;
 

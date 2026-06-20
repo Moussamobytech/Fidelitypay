@@ -3,6 +3,7 @@ package com.Api.Fidelitypay.service;
 import com.Api.Fidelitypay.controller.dto.MerchantApiPrincipal;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentRequest;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentResponse;
+import com.Api.Fidelitypay.controller.dto.FallbackSettingsDto;
 import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.enums.PaymentFlowType;
 import com.Api.Fidelitypay.enums.PaymentStatus;
@@ -15,6 +16,7 @@ import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.model.Payment;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.repository.PaymentRepository;
+import com.Api.Fidelitypay.service.failure.PaymentFailureClassifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -56,8 +58,10 @@ class MerchantPayInServiceTest {
         payDunyaClient = mock(PayDunyaClient.class);
         webhookService = mock(WebhookService.class);
         providerAccountService = mock(MerchantProviderAccountService.class);
+        RoutingFallbackConfigService fallbackConfigService = mock(RoutingFallbackConfigService.class);
+        when(fallbackConfigService.getSettings()).thenReturn(new FallbackSettingsDto());
         service = new MerchantPayInService(paymentRepository, logEntryRepository, routeService, kkiapayClient, payDunyaClient, webhookService,
-                providerAccountService, new PaymentStateTransitionService());
+                providerAccountService, new PaymentStateTransitionService(), new PaymentFailureClassifier(), fallbackConfigService);
         ReflectionTestUtils.setField(service, "allowGlobalCredentialsFallback", true);
 
         User user = User.builder()

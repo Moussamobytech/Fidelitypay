@@ -6,6 +6,7 @@ import com.Api.Fidelitypay.model.MerchantPaymentRouteSetting;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.repository.MerchantPaymentRouteSettingRepository;
 import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
+import com.Api.Fidelitypay.service.routing.RouteScoreCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class MerchantPaymentRouteSettingService {
     private final PaymentProviderRouteRepository routeRepository;
     private final MerchantPaymentRouteSettingRepository settingRepository;
     private final PaymentProviderService paymentProviderService;
+    private final RouteScoreCalculator routeScoreCalculator;
 
     @Transactional(readOnly = true)
     public List<PaymentProviderRouteResponse> listMerchantPayInRoutes(String userId) {
@@ -36,7 +38,7 @@ public class MerchantPaymentRouteSettingService {
                     return paymentProviderService.toRouteResponse(route,
                             setting == null ? null : setting.isEnabled(),
                             merchantPriority,
-                            PaymentRouteService.score(route, merchantPriority));
+                            routeScoreCalculator.score(route, merchantPriority));
                 })
                 .toList();
     }
@@ -46,7 +48,7 @@ public class MerchantPaymentRouteSettingService {
         return routeRepository.findByDirectionWithProviderOrderByCountryAscOperatorAscPriorityAsc(PaymentDirection.PAYIN)
                 .stream()
                 .map(route -> paymentProviderService.toRouteResponse(route, null, null,
-                        PaymentRouteService.score(route, null)))
+                        routeScoreCalculator.score(route, null)))
                 .toList();
     }
 
@@ -64,7 +66,7 @@ public class MerchantPaymentRouteSettingService {
         setting.setEnabled(enabled);
         MerchantPaymentRouteSetting saved = settingRepository.save(setting);
         return paymentProviderService.toRouteResponse(route, saved.isEnabled(), saved.getPriority(),
-                PaymentRouteService.score(route, saved.getPriority()));
+                routeScoreCalculator.score(route, saved.getPriority()));
     }
 
     @Transactional
@@ -73,7 +75,7 @@ public class MerchantPaymentRouteSettingService {
                 .orElseThrow(() -> new IllegalArgumentException("Payment provider route not found"));
         route.setEnabled(enabled);
         PaymentProviderRoute saved = routeRepository.save(route);
-        return paymentProviderService.toRouteResponse(saved, null, null, PaymentRouteService.score(saved, null));
+        return paymentProviderService.toRouteResponse(saved, null, null, routeScoreCalculator.score(saved, null));
     }
 
     @Transactional
@@ -90,7 +92,7 @@ public class MerchantPaymentRouteSettingService {
         setting.setPriority(priority);
         MerchantPaymentRouteSetting saved = settingRepository.save(setting);
         return paymentProviderService.toRouteResponse(route, saved.isEnabled(), saved.getPriority(),
-                PaymentRouteService.score(route, saved.getPriority()));
+                routeScoreCalculator.score(route, saved.getPriority()));
     }
 
     @Transactional(readOnly = true)

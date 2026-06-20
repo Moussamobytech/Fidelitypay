@@ -12,6 +12,19 @@ import java.util.Optional;
 
 @Repository
 public interface PaymentProviderRouteRepository extends JpaRepository<PaymentProviderRoute, Long> {
+
+    @Query("""
+            select r from PaymentProviderRoute r
+            join fetch r.provider
+            """)
+    List<PaymentProviderRoute> findAllWithProvider();
+
+    @Query("""
+            select r from PaymentProviderRoute r
+            join fetch r.provider
+            where r.id = :id
+            """)
+    Optional<PaymentProviderRoute> findByIdWithProvider(@Param("id") Long id);
     @Query("""
             select r from PaymentProviderRoute r
             join fetch r.provider p
@@ -60,10 +73,4 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
             """)
     List<PaymentProviderRoute> findAllWithProviderOrderByCountryAscOperatorAscPriorityAsc();
 
-    @Query("""
-            select r from PaymentProviderRoute r
-            join fetch r.provider
-            where r.id = :id
-            """)
-    Optional<PaymentProviderRoute> findByIdWithProvider(@Param("id") Long id);
 }

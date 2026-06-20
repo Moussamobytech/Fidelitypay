@@ -4,6 +4,7 @@ import com.Api.Fidelitypay.enums.PaymentDirection;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
 import com.Api.Fidelitypay.repository.MerchantPaymentRouteSettingRepository;
 import com.Api.Fidelitypay.repository.PaymentProviderRouteRepository;
+import com.Api.Fidelitypay.service.routing.RouteScoreCalculator;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -25,7 +26,7 @@ class MerchantPaymentRouteSettingServiceTest {
         MerchantPaymentRouteSettingRepository settingRepository = mock(MerchantPaymentRouteSettingRepository.class);
         PaymentProviderService paymentProviderService = mock(PaymentProviderService.class);
         MerchantPaymentRouteSettingService service = new MerchantPaymentRouteSettingService(
-                routeRepository, settingRepository, paymentProviderService);
+                routeRepository, settingRepository, paymentProviderService, new RouteScoreCalculator());
 
         PaymentProviderRoute enabled = new PaymentProviderRoute();
         enabled.setId(1L);

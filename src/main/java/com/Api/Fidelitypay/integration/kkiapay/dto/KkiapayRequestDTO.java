@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class KkiapayRequestDTO {
-    private double amount;
+    private long amount;
     private String phoneNumber;
     private String country;
     private String firstname;
