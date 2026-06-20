@@ -7,14 +7,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * DTO for creating a new API key
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CreateApiKeyRequest {
+public class UpdateApiKeyRequest {
 
     @NotBlank(message = "Key name is required")
     @Size(min = 3, max = 100, message = "Key name must be between 3 and 100 characters")

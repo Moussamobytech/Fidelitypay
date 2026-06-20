@@ -17,8 +17,6 @@ public class UserUpdateRequest {
     private String role;
     private String applicationName;
     private List<String> countries;
-    private String callbackUrl;
-    private String redirectUrl;
     @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     private Boolean isActive;
 }

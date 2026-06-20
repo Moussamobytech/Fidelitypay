@@ -16,7 +16,8 @@ public class PaymentProviderRouteResponse {
     private String country;
     private String operator;
     private PaymentFlowType flowType;
-    private String environment;
+    private boolean liveEnabled;
+    private boolean sandboxEnabled;
     private String providerChannel;
     private int priority;
     private Integer merchantPriority;

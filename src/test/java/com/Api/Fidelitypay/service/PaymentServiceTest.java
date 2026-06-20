@@ -2,6 +2,8 @@ package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.enums.PaymentStatus;
+import com.Api.Fidelitypay.enums.PaymentFlowType;
+import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.integration.KkiapayClient;
@@ -11,11 +13,12 @@ import com.Api.Fidelitypay.repository.LogEntryRepository;
 import com.Api.Fidelitypay.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.util.Optional;
+import java.util.List;
 
 @SuppressWarnings("null")
 class PaymentServiceTest {
@@ -42,7 +45,8 @@ class PaymentServiceTest {
                 when(routeService.findAvailablePayIn(anyString(), anyString(), eq("LIVE"), any())).thenReturn(java.util.List.of(route1, route2));
 
                 paymentService = new PaymentService(paymentRepository, logEntryRepository,
-                                webhookService, kkiapayClient, payDunyaClient, routeService);
+                                webhookService, kkiapayClient, payDunyaClient, routeService,
+                                new PaymentStateTransitionService());
         }
 
         private com.Api.Fidelitypay.model.PaymentProviderRoute route(String code) {
@@ -50,6 +54,11 @@ class PaymentServiceTest {
                 provider.setCode(code);
                 com.Api.Fidelitypay.model.PaymentProviderRoute route = new com.Api.Fidelitypay.model.PaymentProviderRoute();
                 route.setProvider(provider);
+                route.setCountry("BJ");
+                route.setOperator("MTN");
+                route.setFlowType(PaymentFlowType.MOBILE_MONEY_REQUEST);
+                route.setProviderChannel(code.toLowerCase() + "-channel");
+                route.setCost(0.0);
                 return route;
         }
 
@@ -61,8 +70,7 @@ class PaymentServiceTest {
                 pr.setRawResponse("{\"status\":\"ok\"}");
                 pr.setResponseTimeMs(150.0);
 
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(pr);
+                when(kkiapayClient.initiatePayIn(any())).thenReturn(pr);
 
                 when(paymentRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -86,16 +94,14 @@ class PaymentServiceTest {
                 kkiapayResult.setRawResponse("TIMEOUT: Connection failed");
                 kkiapayResult.setResponseTimeMs(3000.0);
                 kkiapayResult.setErrorType(ErrorType.TIMEOUT);
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(kkiapayResult);
+                when(kkiapayClient.initiatePayIn(any())).thenReturn(kkiapayResult);
 
                 // PAYDUNYA réussit (fallback)
                 PaymentResult paydunyaResult = new PaymentResult(true);
                 paydunyaResult.setProviderId("paydunya-success-456");
                 paydunyaResult.setRawResponse("{\"status\":\"success\"}");
                 paydunyaResult.setResponseTimeMs(200.0);
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(paydunyaResult);
+                when(payDunyaClient.initiatePayIn(any())).thenReturn(paydunyaResult);
 
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -110,10 +116,8 @@ class PaymentServiceTest {
                 assertTrue(res.isUsedFallback());
                 verify(webhookService, never()).sendWebhook(any(Payment.class));
 
-                verify(kkiapayClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
-                verify(payDunyaClient).initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString());
+                verify(kkiapayClient).initiatePayIn(any());
+                verify(payDunyaClient).initiatePayIn(any());
         }
 
         @Test
@@ -122,10 +126,8 @@ class PaymentServiceTest {
                 failResult.setRawResponse("Erreur: Solde insuffisant pour la transaction");
                 failResult.setResponseTimeMs(100.0);
 
-                when(kkiapayClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(failResult);
-                when(payDunyaClient.initiatePayment(anyDouble(), anyString(), anyString(), anyString(), anyString(),
-                                anyString(), anyString())).thenReturn(failResult);
+                when(kkiapayClient.initiatePayIn(any())).thenReturn(failResult);
+                when(payDunyaClient.initiatePayIn(any())).thenReturn(failResult);
 
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -141,56 +143,58 @@ class PaymentServiceTest {
         }
 
         @Test
-        void processKkiapayCallback_pendingPayment_marksSuccessAndSendsWebhook() {
-                Payment payment = new Payment();
-                payment.setStatus(PaymentStatus.PENDING);
-                payment.setProviderPaymentId("kkiapay-123");
+        void initiatePayment_usesSelectedRouteChannelAndFlowType() {
+                com.Api.Fidelitypay.model.PaymentProviderRoute route = route("PAYDUNYA");
+                route.setCountry("SN");
+                route.setOperator("YAS");
+                route.setFlowType(PaymentFlowType.HOSTED_CHECKOUT);
+                route.setProviderChannel("free-money-senegal");
 
-                when(paymentRepository.findByProviderPaymentId("kkiapay-123")).thenReturn(Optional.of(payment));
+                when(routeService.findAvailablePayIn(eq("SN"), eq("YAS"), eq("LIVE"), any())).thenReturn(List.of(route));
+
+                PaymentResult pr = new PaymentResult(true);
+                pr.setProviderId("paydunya-token");
+                pr.setRawResponse("{\"response_code\":\"00\"}");
+                when(payDunyaClient.initiatePayIn(any())).thenReturn(pr);
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
-                com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback =
-                                new com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO();
-                callback.setTransactionId("kkiapay-123");
-                callback.setPaymentSucces(true);
+                Payment res = paymentService.initiatePayment(new User(), 100.0, "SN", "YAS", "770000000",
+                                "John", "Doe", "john@example.com");
 
-                paymentService.processKkiapayCallback(callback);
+                ArgumentCaptor<PayInProviderRequest> captor = ArgumentCaptor.forClass(PayInProviderRequest.class);
+                verify(payDunyaClient).initiatePayIn(captor.capture());
 
-                assertEquals(PaymentStatus.SUCCESS, payment.getStatus());
-                assertNull(payment.getFailureReason());
-                verify(paymentRepository).save(payment);
-                verify(webhookService).sendWebhook(payment);
+                PayInProviderRequest request = captor.getValue();
+                assertEquals("free-money-senegal", request.getProviderChannel());
+                assertEquals(PaymentFlowType.HOSTED_CHECKOUT, request.getFlowType());
+                assertEquals("YAS", request.getOperator());
+                assertEquals("SN", request.getCountry());
+                assertEquals("PAYDUNYA_YAS_SN", res.getRouteName());
+                assertEquals("free-money-senegal", res.getProviderChannel());
+                assertEquals(PaymentFlowType.HOSTED_CHECKOUT.name(), res.getFlowType());
         }
 
         @Test
-        void processPayDunyaCallback_pendingPayment_marksFailedAndSendsWebhook() {
-                Payment payment = new Payment();
-                payment.setStatus(PaymentStatus.PENDING);
-                payment.setProviderPaymentId("paydunya-token");
+        void initiatePayment_acceptsSenegalPhoneWithCountryPrefix() {
+                com.Api.Fidelitypay.model.PaymentProviderRoute route = route("PAYDUNYA");
+                route.setCountry("SN");
+                route.setOperator("WAVE");
+                route.setProviderChannel("wave-senegal");
 
-                when(paymentRepository.findByProviderPaymentId("paydunya-token")).thenReturn(Optional.of(payment));
+                when(routeService.findAvailablePayIn(eq("SN"), eq("WAVE"), eq("LIVE"), any())).thenReturn(List.of(route));
+
+                PaymentResult pr = new PaymentResult(true);
+                pr.setProviderId("paydunya-token");
+                pr.setRawResponse("{\"response_code\":\"00\"}");
+                when(payDunyaClient.initiatePayIn(any())).thenReturn(pr);
                 when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
 
-                paymentService.processPayDunyaCallback("paydunya-token", false);
+                Payment res = paymentService.initiatePayment(new User(), 100.0, "SN", "WAVE", "221776006060",
+                                "John", "Doe", "john@example.com");
 
-                assertEquals(PaymentStatus.FAILED, payment.getStatus());
-                assertEquals("PROVIDER_REPORTED_FAILURE", payment.getFailureReason());
-                verify(paymentRepository).save(payment);
-                verify(webhookService).sendWebhook(payment);
+                assertNotNull(res);
+                assertNotEquals("INVALID_PHONE_NUMBER", res.getFailureReason());
+                verify(payDunyaClient).initiatePayIn(any());
         }
 
-        @Test
-        void processPayDunyaCallback_terminalPayment_doesNotOverwriteFinalStatus() {
-                Payment payment = new Payment();
-                payment.setStatus(PaymentStatus.SUCCESS);
-                payment.setProviderPaymentId("paydunya-token");
-
-                when(paymentRepository.findByProviderPaymentId("paydunya-token")).thenReturn(Optional.of(payment));
-
-                paymentService.processPayDunyaCallback("paydunya-token", false);
-
-                assertEquals(PaymentStatus.SUCCESS, payment.getStatus());
-                verify(paymentRepository, never()).save(any(Payment.class));
-                verify(webhookService, never()).sendWebhook(any(Payment.class));
-        }
 }

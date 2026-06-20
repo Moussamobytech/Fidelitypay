@@ -19,8 +19,6 @@ public class UserResponse {
     private String role;
     private String applicationName;
     private List<String> countries;
-    private String callbackUrl;
-    private String redirectUrl;
     private LocalDateTime createdAt;
     @com.fasterxml.jackson.annotation.JsonProperty("isActive")
     private boolean isActive;

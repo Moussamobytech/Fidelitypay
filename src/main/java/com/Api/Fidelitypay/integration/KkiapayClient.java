@@ -27,6 +27,8 @@ import java.util.Map;
 @Slf4j
 public class KkiapayClient implements PayInProviderClient {
 
+    private static final String SANDBOX_BASE_URL = "https://api-sandbox.kkiapay.me";
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final KkiapayProperties kkiapayProperties;
@@ -75,7 +77,7 @@ public class KkiapayClient implements PayInProviderClient {
     @Override
     public PaymentResult initiatePayIn(PayInProviderRequest request) {
         long start = System.nanoTime();
-        String baseUrl = resolveBaseUrl(request.getCredentials());
+        String baseUrl = resolveBaseUrl(request.getCredentials(), request.getEnvironment());
         boolean isWave = request.getFlowType() == PaymentFlowType.WAVE_REDIRECT;
         String endpoint = isWave ? "/api/v1/payments/partner/wave" : "/api/v1/payments/request";
 
@@ -83,10 +85,6 @@ public class KkiapayClient implements PayInProviderClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("x-api-key", resolvePublicKey(request.getCredentials()));
-            String privateKey = resolvePrivateKey(request.getCredentials());
-            if (privateKey != null && !privateKey.isBlank()) {
-                headers.set("x-private-key", privateKey);
-            }
 
             Object payload = isWave ? wavePayload(request) : mobileMoneyPayload(request);
             log.info("Kkiapay Attempt | URL={} | publicKey={} | payload={}",
@@ -111,14 +109,15 @@ public class KkiapayClient implements PayInProviderClient {
             result.setSuccess(success);
 
             if (success) {
-                result.setProviderId(body.getTransactionId());
+                String transactionId = body.resolvedTransactionId();
+                result.setProviderId(transactionId);
                 result.setPaymentUrl(isWave ? body.getWave_launch_url() : body.getUrl());
-                result.setProviderTransactionCreated(body.getTransactionId() != null);
+                result.setProviderTransactionCreated(transactionId != null);
                 if (request.getFlowType() == PaymentFlowType.ORANGE_CI_OTP) {
                     result.setRequiresAction(true);
                     result.setNextActionType("SUBMIT_OTP");
                 }
-                log.info("Kkiapay SUCCESS | txId={} | timeMs={}", body.getTransactionId(), elapsedMs);
+                log.info("Kkiapay SUCCESS | txId={} | timeMs={}", transactionId, elapsedMs);
             } else {
                 result.setErrorType(errorTypeForStatus(response.getStatusCode().value()));
                 log.warn("Kkiapay FAILED | status={} | body={}", body != null ? body.getStatus() : "UNKNOWN", response.getBody());
@@ -156,10 +155,6 @@ public class KkiapayClient implements PayInProviderClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("x-api-key", resolvePublicKey(credentials));
-            String privateKey = resolvePrivateKey(credentials);
-            if (privateKey != null && !privateKey.isBlank()) {
-                headers.set("x-private-key", privateKey);
-            }
             Map<String, Object> payload = Map.of(
                     "transactionId", payment.getProviderPaymentId(),
                     "otp", value,
@@ -213,10 +208,6 @@ public class KkiapayClient implements PayInProviderClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("x-api-key", resolvePublicKey(credentials));
-            String privateKey = resolvePrivateKey(credentials);
-            if (privateKey != null && !privateKey.isBlank()) {
-                headers.set("x-private-key", privateKey);
-            }
 
             String payload = "{\"transactionId\":\"" + transactionId + "\"}";
             ResponseEntity<KkiapayResponseDTO> response = restTemplate.postForEntity(
@@ -328,9 +319,18 @@ public class KkiapayClient implements PayInProviderClient {
         return ErrorType.UNKNOWN;
     }
 
-    private String resolveBaseUrl(ProviderCredentials credentials) {
+    private String resolveBaseUrl(ProviderCredentials credentials, String environment) {
         String configured = credentials == null ? null : credentials.get("baseUrl");
-        return configured != null && !configured.isBlank() ? configured.trim() : kkiapayProperties.getApi().getBaseUrl();
+        if (configured != null && !configured.isBlank()) {
+            return configured.trim();
+        }
+        return "SANDBOX".equalsIgnoreCase(environment)
+                ? SANDBOX_BASE_URL
+                : kkiapayProperties.getApi().getBaseUrl();
+    }
+
+    private String resolveBaseUrl(ProviderCredentials credentials) {
+        return resolveBaseUrl(credentials, credentials == null ? null : credentials.get("_environment"));
     }
 
     // Temporary development bridge: if merchant credentials are missing, fall back to
@@ -340,12 +340,6 @@ public class KkiapayClient implements PayInProviderClient {
         return credentials != null && credentials.publicKey() != null
                 ? credentials.publicKey()
                 : kkiapayProperties.getApi().getPublicKey();
-    }
-
-    private String resolvePrivateKey(ProviderCredentials credentials) {
-        return credentials != null && credentials.privateKey() != null
-                ? credentials.privateKey()
-                : kkiapayProperties.getApi().getPrivateKey();
     }
 
     private String resolveCallbackUrl(PayInProviderRequest request) {

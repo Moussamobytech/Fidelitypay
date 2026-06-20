@@ -26,7 +26,7 @@ services:
       KKIAPAY_API_PRIVATE_KEY: ${KKIAPAY_API_PRIVATE_KEY}
       KKIAPAY_API_SECRET_KEY: ${KKIAPAY_API_SECRET_KEY}
       KKIAPAY_STORE_NAME: FidelityPay Store
-      KKIAPAY_CALLBACK_URL: http://localhost:8060/api/payments/callback/kkiapay
+      KKIAPAY_CALLBACK_URL: http://localhost:8060/api/v1/providers/kkiapay/checkout/ipn
       WEBHOOK_URL: http://example.com/webhook
       HTTP_CONNECT_TIMEOUT: "5000"
       HTTP_READ_TIMEOUT: "10000"

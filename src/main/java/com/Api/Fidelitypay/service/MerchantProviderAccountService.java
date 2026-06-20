@@ -77,7 +77,10 @@ public class MerchantProviderAccountService {
 
     @Transactional(readOnly = true)
     public ProviderCredentials decrypt(MerchantProviderAccount account) {
-        return credentialCryptoService.decrypt(account.getCredentialsEncrypted());
+        Map<String, String> values = new HashMap<>(
+                credentialCryptoService.decrypt(account.getCredentialsEncrypted()).values());
+        values.put("_environment", account.getEnvironment());
+        return new ProviderCredentials(values);
     }
 
     private Map<String, String> mergeCredentials(MerchantProviderAccount account, Map<String, String> submittedCredentials) {

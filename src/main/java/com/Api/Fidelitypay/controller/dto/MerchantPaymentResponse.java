@@ -13,6 +13,7 @@ public class MerchantPaymentResponse {
     private PaymentStatus status;
     private String paymentUrl;
     private String provider;
+    private String flowType;
     private String operator;
     private String country;
     private BigDecimal amount;

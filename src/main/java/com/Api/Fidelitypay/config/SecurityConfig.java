@@ -81,16 +81,15 @@ public class SecurityConfig {
                                 .csrf(AbstractHttpConfigurer::disable)
                                 .authorizeHttpRequests(auth -> auth
                                                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                                                .requestMatchers("/", "/swagger-ui.html", "/swagger-ui/**",
+                                                                "/v3/api-docs", "/v3/api-docs/**")
+                                                .permitAll()
                                                 .requestMatchers("/api/v1/auth/**").permitAll()
                                                 .requestMatchers("/actuator/**").permitAll()
                                                 .requestMatchers("/api/v1/developer/health").permitAll()
-                                                .requestMatchers("/api/payments/callback/**").permitAll()
                                                 .requestMatchers("/api/v1/providers/paydunya/**", "/api/v1/providers/kkiapay/**").permitAll()
                                                 .requestMatchers("/api/v1/payments/**").permitAll()
                                                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                                                .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                                                "/api/monitoring/check", "/api/monitoring/routes/toggle")
-                                                .hasAnyRole("ADMIN", "OPERATOR")
                                                 .requestMatchers("/api/v1/developer/**", "/api/payments/**",
                                                                 "/api/monitoring/**")
                                                 .authenticated()

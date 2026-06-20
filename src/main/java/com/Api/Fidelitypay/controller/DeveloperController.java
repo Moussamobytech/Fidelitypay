@@ -37,31 +37,27 @@ public class DeveloperController {
 
     /**
      * GET /api/v1/developer/keys
-     * Retrieve all API keys for the authenticated user
+     * Retrieve active API keys for the authenticated user
      */
     @GetMapping("/keys")
-        public ResponseEntity<List<ApiKeyResponse>> getApiKeys(
-            @RequestParam(required = false) String environment) {
+    public ResponseEntity<List<ApiKeyResponse>> getApiKeys() {
         String userId = resolveUserId();
         log.info("📋 Fetching API keys for user: {}", userId);
 
-        List<ApiKeyResponse> keys = environment != null
-            ? apiKeyService.getUserApiKeysByEnvironment(userId, environment)
-            : apiKeyService.getUserApiKeys(userId);
+        List<ApiKeyResponse> keys = apiKeyService.getUserApiKeys(userId);
 
         return ResponseEntity.ok(keys);
-        }
+    }
 
     /**
      * POST /api/v1/developer/keys
-     * Generate a new API key pair (public/secret)
-     * ⚠️ WARNING: The secret key is returned ONLY ONCE - save it immediately!
+     * Generate a new API key. Its complete value is returned only once.
      */
     @PostMapping("/keys")
     public ResponseEntity<ApiKeyResponse> createApiKey(
             @Valid @RequestBody CreateApiKeyRequest request) {
         String userId = resolveUserId();
-        log.info("🔑 Creating new API key for user: {} in {} environment", userId, request.getEnvironment());
+        log.info("🔑 Creating new API key for user: {}", userId);
 
         ApiKeyResponse response = apiKeyService.createApiKey(userId, request);
 
@@ -69,20 +65,18 @@ public class DeveloperController {
     }
 
     /**
-     * POST /api/v1/developer/keys/{id}/revoke
-     * Revoke (disable) a specific API key
+     * PATCH /api/v1/developer/keys/{id}
+     * Rename a merchant API key.
      */
-    @PostMapping("/keys/{id}/revoke")
-    public ResponseEntity<Map<String, String>> revokeApiKey(
-            @PathVariable String id) {
+    @PatchMapping("/keys/{id}")
+    public ResponseEntity<?> renameApiKey(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateApiKeyRequest request) {
         String userId = resolveUserId();
-        log.info("🔒 Revoking API key: {} for user: {}", id, userId);
+        log.info("Renaming API key: {} for user: {}", id, userId);
 
         try {
-            apiKeyService.revokeApiKey(userId, id);
-            return ResponseEntity.ok(Map.of(
-                    "message", "API key revoked successfully",
-                    "keyId", id));
+            return ResponseEntity.ok(apiKeyService.renameApiKey(userId, id, request));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", e.getMessage()));
@@ -90,21 +84,25 @@ public class DeveloperController {
     }
 
     /**
-     * POST /api/v1/developer/keys/rotate
-     * Rotate all API keys (revoke old ones and generate new ones)
-     * ⚠️ This is a sensitive operation - use with caution!
+     * DELETE /api/v1/developer/keys/{id}
+     * Remove a merchant API key from the dashboard and disable authentication.
      */
-    @PostMapping("/keys/rotate")
-        public ResponseEntity<Map<String, Object>> rotateApiKeys() {
+    @DeleteMapping("/keys/{id}")
+    public ResponseEntity<Map<String, String>> deleteApiKey(
+            @PathVariable String id) {
         String userId = resolveUserId();
-        log.warn("🔄 Rotating all API keys for user: {}", userId);
+        log.info("Deleting API key: {} for user: {}", id, userId);
 
-        List<ApiKeyResponse> newKeys = apiKeyService.rotateApiKeys(userId);
-
-        return ResponseEntity.ok(Map.of(
-            "message", "All API keys have been rotated successfully",
-            "newKeys", newKeys));
+        try {
+            apiKeyService.deleteApiKey(userId, id);
+            return ResponseEntity.ok(Map.of(
+                    "message", "API key deleted successfully",
+                    "keyId", id));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", e.getMessage()));
         }
+    }
 
     // =============================================================================
     // METRICS & MONITORING
@@ -186,7 +184,9 @@ public class DeveloperController {
             WebhookResponse webhook = webhookService.createWebhook(userId, request);
             return ResponseEntity.status(HttpStatus.CREATED).body(webhook);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            return ResponseEntity.status(e.getMessage() != null && e.getMessage().startsWith("Webhook already")
+                    ? HttpStatus.CONFLICT
+                    : HttpStatus.BAD_REQUEST).build();
         }
     }
 

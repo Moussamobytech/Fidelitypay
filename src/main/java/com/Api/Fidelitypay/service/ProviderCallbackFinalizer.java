@@ -30,6 +30,7 @@ public class ProviderCallbackFinalizer {
     private final PayDunyaClient payDunyaClient;
     private final WebhookService webhookService;
     private final LogEntryRepository logEntryRepository;
+    private final PaymentStateTransitionService transitionService;
 
     @Async
     @Transactional
@@ -44,8 +45,15 @@ public class ProviderCallbackFinalizer {
             if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && formStatus != null) {
                 verifiedStatus = statusFromPayDunyaForm(formStatus);
             }
-            applyProviderStatus(payment, verifiedStatus, "PAYDUNYA_CALLBACK");
-            logCallback(payment, "PAYDUNYA_CALLBACK_FINALIZED", statusToLogStatus(verifiedStatus), rawForm, null, false);
+            PaymentStateTransitionService.TransitionResult transition =
+                    transitionService.transition(payment, verifiedStatus, "PAYDUNYA_CALLBACK");
+            if (transition.accepted()) {
+                paymentRepository.save(payment);
+                if (transitionService.shouldNotifyWebhook(transition)) {
+                    webhookService.sendWebhook(payment);
+                }
+            }
+            logCallback(payment, finalizedEvent("PAYDUNYA", transition), statusToLogStatus(payment.getStatus()), rawForm, null, false);
         }, () -> log.warn("PayDunya finalizer could not find payment for token={}", token));
     }
 
@@ -62,8 +70,15 @@ public class ProviderCallbackFinalizer {
             if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION) {
                 verifiedStatus = callback.isPaymentSucces() ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
             }
-            applyProviderStatus(payment, verifiedStatus, "KKIAPAY_CALLBACK");
-            logCallback(payment, "KKIAPAY_CALLBACK_FINALIZED", statusToLogStatus(verifiedStatus), rawBody, null, false);
+            PaymentStateTransitionService.TransitionResult transition =
+                    transitionService.transition(payment, verifiedStatus, "KKIAPAY_CALLBACK");
+            if (transition.accepted()) {
+                paymentRepository.save(payment);
+                if (transitionService.shouldNotifyWebhook(transition)) {
+                    webhookService.sendWebhook(payment);
+                }
+            }
+            logCallback(payment, finalizedEvent("KKIAPAY", transition), statusToLogStatus(payment.getStatus()), rawBody, null, false);
         }, () -> log.warn("KkiaPay finalizer could not find payment for transactionId={}", callback.getTransactionId()));
     }
 
@@ -83,22 +98,21 @@ public class ProviderCallbackFinalizer {
         };
     }
 
-    private void applyProviderStatus(Payment payment, PaymentStatus status, String source) {
-        payment.setStatus(status);
-        payment.setUpdatedAt(LocalDateTime.now());
-        if (status == PaymentStatus.SUCCESS) {
-            payment.setFailureReason(null);
-        } else if (status == PaymentStatus.FAILED || status == PaymentStatus.CANCELLED) {
-            payment.setFailureReason(source + "_" + status.name());
-        }
-        paymentRepository.save(payment);
-        if (isTerminal(status)) {
-            webhookService.sendWebhook(payment);
-        }
-    }
-
     private boolean isTerminal(PaymentStatus status) {
         return status == PaymentStatus.SUCCESS || status == PaymentStatus.FAILED || status == PaymentStatus.CANCELLED;
+    }
+
+    private String finalizedEvent(String provider, PaymentStateTransitionService.TransitionResult transition) {
+        if (transition == null) {
+            return provider + "_CALLBACK_FINALIZED";
+        }
+        if (!transition.accepted()) {
+            return provider + "_CALLBACK_REJECTED_" + transition.reason();
+        }
+        if (!transition.changed()) {
+            return provider + "_CALLBACK_DUPLICATE";
+        }
+        return provider + "_CALLBACK_FINALIZED";
     }
 
     private LogStatus statusToLogStatus(PaymentStatus status) {

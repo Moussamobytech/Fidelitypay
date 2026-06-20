@@ -40,9 +40,9 @@ public class ApiRequestInterceptor implements HandlerInterceptor {
             request.setAttribute(USER_ID_ATTR, userId);
         }
 
-        String publicKey = request.getHeader("X-API-Public-Key");
-        if (publicKey != null) {
-            apiKeyService.authenticateApiKey(publicKey, request.getHeader("X-API-Secret-Key"))
+        String rawApiKey = request.getHeader("X-API-Key");
+        if (rawApiKey != null) {
+            apiKeyService.authenticateApiKey(rawApiKey)
                     .ifPresent(apiKey -> {
                         request.setAttribute(API_KEY_ID_ATTR, apiKey.getId());
                         request.setAttribute(USER_ID_ATTR, apiKey.getUserId());
@@ -102,10 +102,7 @@ public class ApiRequestInterceptor implements HandlerInterceptor {
                     errorMessage);
 
             // Update API key last used timestamp if applicable
-            String publicKey = request.getHeader("X-API-Public-Key");
-            if (publicKey != null && ipAddress != null) {
-                apiKeyService.updateLastUsed(publicKey, ipAddress);
-            }
+            // MerchantApiAuthService records API-key usage after successful authentication.
 
         } catch (Exception e) {
             // Don't let logging errors affect the request

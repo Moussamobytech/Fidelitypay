@@ -19,12 +19,15 @@ public class PaymentInitiateRequest {
     @NotBlank
     private String operator;
 
-    @NotBlank
     private String phone;
 
     private String firstname;
     private String lastname;
     private String email;
+    private String environment = "live";
+    private String idempotencyKey;
+    private String returnUrl;
+    private String cancelUrl;
 
     public PaymentInitiateRequest() {
     }
@@ -35,6 +38,38 @@ public class PaymentInitiateRequest {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getEnvironment() {
+        return environment;
+    }
+
+    public void setEnvironment(String environment) {
+        this.environment = environment;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public String getReturnUrl() {
+        return returnUrl;
+    }
+
+    public void setReturnUrl(String returnUrl) {
+        this.returnUrl = returnUrl;
+    }
+
+    public String getCancelUrl() {
+        return cancelUrl;
+    }
+
+    public void setCancelUrl(String cancelUrl) {
+        this.cancelUrl = cancelUrl;
     }
 
     public String getFirstname() {

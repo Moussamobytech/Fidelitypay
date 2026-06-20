@@ -31,14 +31,18 @@ public class PaymentRouteService {
         return routeRepository.findAvailable(
                         PaymentDirection.PAYIN,
                         normalize(country),
-                        normalize(operator),
-                        normalizedEnvironment)
+                        normalize(operator))
                 .stream()
+                .filter(route -> supportsEnvironment(route, normalizedEnvironment))
                 .filter(route -> !disabledRouteIds.contains(route.getId()))
                 .filter(route -> allowGlobalCredentialsFallback || accountService.getEnabledAccount(merchantUserId,
                         route.getProvider().getId(), normalizedEnvironment) != null)
                 .sorted(Comparator.comparingDouble(route -> score(route, merchantPriorities.get(route.getId()))))
                 .toList();
+    }
+
+    private boolean supportsEnvironment(PaymentProviderRoute route, String environment) {
+        return "SANDBOX".equals(environment) ? route.isSandboxEnabled() : route.isLiveEnabled();
     }
 
     public List<String> findAvailablePayInOperators(String country) {

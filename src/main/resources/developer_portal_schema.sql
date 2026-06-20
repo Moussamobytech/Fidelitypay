@@ -7,8 +7,8 @@
 -- =============================================================================
 -- 1. API KEYS TABLE
 -- =============================================================================
--- Stores API key pairs with secure hashing
--- IMPORTANT: Never store secret keys in plain text!
+-- Stores one API key as a lookup identifier plus a secure secret hash.
+-- IMPORTANT: Never store the complete API key in plain text!
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id VARCHAR(255) PRIMARY KEY,

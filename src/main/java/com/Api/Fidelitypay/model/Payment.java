@@ -56,6 +56,10 @@ public class Payment {
     @Column(length = 255)
     private String apiKeyId;
 
+    /** Origin of the payment initiation, used for integration-readiness tracking. */
+    @Column(length = 20)
+    private String initiationSource;
+
     /** Opérateur choisi par l'utilisateur (OM, Wave…) */
     @Column(nullable = false)
     private String operator;

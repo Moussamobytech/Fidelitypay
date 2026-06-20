@@ -8,6 +8,7 @@ import lombok.Data;
 @Builder
 public class PayInProviderRequest {
     private ProviderCredentials credentials;
+    private String environment;
     private String paymentId;
     private long amount;
     private String country;

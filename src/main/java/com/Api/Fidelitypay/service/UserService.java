@@ -44,8 +44,6 @@ public class UserService {
         }
         if (request.getApplicationName() != null) user.setApplicationName(request.getApplicationName());
         if (request.getCountries() != null) user.setCountries(request.getCountries());
-        if (request.getCallbackUrl() != null) user.setCallbackUrl(request.getCallbackUrl());
-        if (request.getRedirectUrl() != null) user.setRedirectUrl(request.getRedirectUrl());
         if (request.getIsActive() != null) user.setActive(request.getIsActive());
 
         User updatedUser = userRepository.save(user);
@@ -69,8 +67,6 @@ public class UserService {
                 .role(user.getRole() != null ? user.getRole().name() : null)
                 .applicationName(user.getApplicationName())
                 .countries(user.getCountries())
-                .callbackUrl(user.getCallbackUrl())
-                .redirectUrl(user.getRedirectUrl())
                 .createdAt(user.getCreatedAt())
                 .isActive(user.isActive())
                 .build();

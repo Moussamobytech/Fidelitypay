@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PaymentProviderRouteRepository extends JpaRepository<PaymentProviderRoute, Long> {
@@ -17,7 +18,6 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
             where r.direction = :direction
               and r.country = :country
               and r.operator = :operator
-              and r.environment = :environment
               and r.enabled = true
               and p.status = com.Api.Fidelitypay.enums.PaymentProviderStatus.ACTIVE
             order by r.priority asc
@@ -25,8 +25,7 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
     List<PaymentProviderRoute> findAvailable(
             @Param("direction") PaymentDirection direction,
             @Param("country") String country,
-            @Param("operator") String operator,
-            @Param("environment") String environment);
+            @Param("operator") String operator);
 
     List<PaymentProviderRoute> findByDirectionAndCountryAndOperatorOrderByPriorityAsc(
             PaymentDirection direction,
@@ -53,4 +52,18 @@ public interface PaymentProviderRouteRepository extends JpaRepository<PaymentPro
             """)
     List<PaymentProviderRoute> findByDirectionWithProviderOrderByCountryAscOperatorAscPriorityAsc(
             @Param("direction") PaymentDirection direction);
+
+    @Query("""
+            select r from PaymentProviderRoute r
+            join fetch r.provider
+            order by r.country asc, r.operator asc, r.priority asc
+            """)
+    List<PaymentProviderRoute> findAllWithProviderOrderByCountryAscOperatorAscPriorityAsc();
+
+    @Query("""
+            select r from PaymentProviderRoute r
+            join fetch r.provider
+            where r.id = :id
+            """)
+    Optional<PaymentProviderRoute> findByIdWithProvider(@Param("id") Long id);
 }

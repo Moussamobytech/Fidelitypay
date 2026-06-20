@@ -12,7 +12,6 @@ import com.Api.Fidelitypay.integration.PayInProviderClient;
 import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.ProviderCredentials;
-import com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO;
 import com.Api.Fidelitypay.model.LogEntry;
 import com.Api.Fidelitypay.model.MerchantProviderAccount;
 import com.Api.Fidelitypay.model.PaymentProviderRoute;
@@ -42,6 +41,7 @@ public class MerchantPayInService {
     private final PayDunyaClient payDunyaClient;
     private final WebhookService webhookService;
     private final MerchantProviderAccountService providerAccountService;
+    private final PaymentStateTransitionService transitionService;
 
     @Value("${payment.providers.allow-global-credentials-fallback:false}")
     private boolean allowGlobalCredentialsFallback;
@@ -55,6 +55,10 @@ public class MerchantPayInService {
 
         String normalizedCountry = normalize(request.getCountry());
         String normalizedOperator = normalizeOperator(request.getOperator());
+        if (requiresPhone(normalizedCountry, normalizedOperator)
+                && (request.getCustomer().getPhone() == null || request.getCustomer().getPhone().isBlank())) {
+            throw new IllegalArgumentException("customer.phone is required for mobile-money payments");
+        }
         String environment = normalize(principal.getEnvironment());
 
         return paymentRepository.findByApiKeyIdAndIdempotencyKey(principal.getApiKey().getId(), idempotencyKey)
@@ -73,7 +77,7 @@ public class MerchantPayInService {
 
     @Transactional
     public MerchantPaymentResponse submitOtp(MerchantApiPrincipal principal, String paymentId, String otp) {
-        Payment payment = paymentRepository.findByPaymentId(paymentId)
+        Payment payment = paymentRepository.findByPaymentIdForUpdate(paymentId)
                 .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
         assertOwner(principal, payment);
         if (payment.getStatus() != PaymentStatus.REQUIRES_ACTION
@@ -86,60 +90,17 @@ public class MerchantPayInService {
         payment.setProviderResponseTimeMs((long) result.getResponseTimeMs());
         payment.setUpdatedAt(LocalDateTime.now());
         if (result.isSuccess()) {
-            payment.setStatus(PaymentStatus.PENDING);
-            payment.setNextActionType(null);
-            payment.setFailureReason(null);
+            transitionService.transition(payment, PaymentStatus.PENDING, "OTP_ACTION");
         } else {
-            payment.setStatus(PaymentStatus.FAILED);
+            PaymentStateTransitionService.TransitionResult transition =
+                    transitionService.transition(payment, PaymentStatus.FAILED, "OTP_ACTION");
             payment.setFailureReason(determineFailureReason(result));
-            webhookService.sendWebhook(payment);
+            if (transitionService.shouldNotifyWebhook(transition)) {
+                webhookService.sendWebhook(payment);
+            }
         }
         paymentRepository.save(payment);
         return toResponse(payment);
-    }
-
-    @Transactional
-    public void processKkiapayCallback(KkiapayCallbackDTO callback) {
-        if (callback == null || callback.getTransactionId() == null) {
-            log.warn("Ignoring malformed Kkiapay callback");
-            return;
-        }
-        paymentRepository.findByProviderPaymentId(callback.getTransactionId()).ifPresent(payment -> {
-            if (isTerminal(payment.getStatus())) {
-                return;
-            }
-            PaymentStatus verifiedStatus = kkiapayClient.checkStatus(callback.getTransactionId(), credentialsFor(payment));
-            if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && callback.isPaymentSucces()) {
-                verifiedStatus = PaymentStatus.SUCCESS;
-            } else if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && !callback.isPaymentSucces()) {
-                verifiedStatus = PaymentStatus.FAILED;
-            }
-            applyProviderStatus(payment, verifiedStatus, "KKIAPAY_CALLBACK");
-        });
-    }
-
-    @Transactional
-    public void processPayDunyaCallback(String token, String formStatus, String hash) {
-        paymentRepository.findByProviderPaymentId(token).ifPresent(payment -> {
-            ProviderCredentials credentials = credentialsFor(payment);
-            if (!payDunyaClient.isValidCallbackHash(hash, credentials)) {
-                log.warn("Rejected PayDunya callback for token={} due invalid hash", token);
-                return;
-            }
-            if (isTerminal(payment.getStatus())) {
-                return;
-            }
-            PaymentStatus verifiedStatus = payDunyaClient.checkStatus(token, credentials);
-            if (verifiedStatus == PaymentStatus.PENDING_RECONCILIATION && formStatus != null) {
-                verifiedStatus = switch (formStatus.toUpperCase()) {
-                    case "COMPLETED", "SUCCESS" -> PaymentStatus.SUCCESS;
-                    case "FAILED" -> PaymentStatus.FAILED;
-                    case "CANCELLED", "CANCELED" -> PaymentStatus.CANCELLED;
-                    default -> PaymentStatus.PENDING;
-                };
-            }
-            applyProviderStatus(payment, verifiedStatus, "PAYDUNYA_CALLBACK");
-        });
     }
 
     private MerchantPaymentResponse createAndInitiate(MerchantApiPrincipal principal, MerchantPaymentRequest request,
@@ -149,6 +110,7 @@ public class MerchantPayInService {
         payment.setUser(principal.getUser());
         payment.setApiKeyId(principal.getApiKey().getId());
         payment.setIdempotencyKey(idempotencyKey);
+        payment.setInitiationSource(defaultInitiationSource(principal.getInitiationSource()));
         payment.setAmount(BigDecimal.valueOf(request.getAmount()));
         payment.setCurrency("XOF");
         payment.setCountry(country);
@@ -166,12 +128,15 @@ public class MerchantPayInService {
 
         List<PaymentProviderRoute> routes = routeService.findAvailablePayIn(country, operator, environment, principal.getUser().getId());
         if (routes.isEmpty()) {
-            payment.setStatus(PaymentStatus.FAILED);
+            PaymentStateTransitionService.TransitionResult transition =
+                    transitionService.transition(payment, PaymentStatus.FAILED, "PAYIN_INITIATE");
             payment.setFailureReason(routeService.hasAnyPayInRoute(country, operator)
                     ? "NO_PROVIDER_AVAILABLE_FOR_ENVIRONMENT"
                     : "UNSUPPORTED_PAYIN_CAPABILITY");
             paymentRepository.save(payment);
-            webhookService.sendWebhook(payment);
+            if (transitionService.shouldNotifyWebhook(transition)) {
+                webhookService.sendWebhook(payment);
+            }
             return toResponse(payment);
         }
 
@@ -186,7 +151,8 @@ public class MerchantPayInService {
                 continue;
             }
             ProviderCredentials credentials = account == null ? null : providerAccountService.decrypt(account);
-            PaymentResult result = clientFor(route.getProvider().getCode()).initiatePayIn(toProviderRequest(payment, route, credentials));
+            PaymentResult result = clientFor(route.getProvider().getCode()).initiatePayIn(
+                    toProviderRequest(payment, route, credentials, account == null ? environment : account.getEnvironment()));
             saveRouteAttempt(payment, route, result, attempt > 1);
             finalResult = result;
             finalRoute = route;
@@ -207,12 +173,14 @@ public class MerchantPayInService {
                 payment.setUsedFallback(attempt > 1);
                 payment.setFallbackReason(attempt > 1 ? "PRIMARY_PROVIDER_FAILED" : null);
                 if (result.isRequiresAction()) {
-                    payment.setStatus(PaymentStatus.REQUIRES_ACTION);
                     payment.setNextActionType(result.getNextActionType());
-                    webhookService.sendWebhook(payment);
+                    PaymentStateTransitionService.TransitionResult transition =
+                            transitionService.transition(payment, PaymentStatus.REQUIRES_ACTION, "PAYIN_INITIATE");
+                    if (transitionService.shouldNotifyWebhook(transition)) {
+                        webhookService.sendWebhook(payment);
+                    }
                 } else {
-                    payment.setStatus(PaymentStatus.PENDING);
-                    payment.setNextActionType(null);
+                    transitionService.transition(payment, PaymentStatus.PENDING, "PAYIN_INITIATE");
                 }
                 payment.setFailureReason(null);
                 paymentRepository.save(payment);
@@ -221,7 +189,7 @@ public class MerchantPayInService {
 
             if (result.isProviderTransactionCreated()) {
                 payment.setProviderPaymentId(result.getProviderId());
-                payment.setStatus(PaymentStatus.PENDING_RECONCILIATION);
+                transitionService.transition(payment, PaymentStatus.PENDING_RECONCILIATION, "PAYIN_INITIATE");
                 payment.setFailureReason("PROVIDER_RESULT_UNKNOWN");
                 paymentRepository.save(payment);
                 return toResponse(payment);
@@ -232,12 +200,15 @@ public class MerchantPayInService {
             }
         }
 
-        payment.setStatus(PaymentStatus.FAILED);
+        PaymentStateTransitionService.TransitionResult transition =
+                transitionService.transition(payment, PaymentStatus.FAILED, "PAYIN_INITIATE");
         payment.setProvider(finalRoute != null ? finalRoute.getProvider().getCode() : null);
         payment.setFailureReason(determineFailureReason(finalResult));
         payment.setRouteHealth("DEGRADED");
         paymentRepository.save(payment);
-        webhookService.sendWebhook(payment);
+        if (transitionService.shouldNotifyWebhook(transition)) {
+            webhookService.sendWebhook(payment);
+        }
         return toResponse(payment);
     }
 
@@ -265,9 +236,17 @@ public class MerchantPayInService {
         return route.getProvider().getCode() + "_" + route.getOperator() + "_" + route.getCountry();
     }
 
-    private PayInProviderRequest toProviderRequest(Payment payment, PaymentProviderRoute route, ProviderCredentials credentials) {
+    private String defaultInitiationSource(String initiationSource) {
+        return initiationSource == null || initiationSource.isBlank()
+                ? "API"
+                : initiationSource.trim().toUpperCase();
+    }
+
+    private PayInProviderRequest toProviderRequest(Payment payment, PaymentProviderRoute route,
+            ProviderCredentials credentials, String environment) {
         return PayInProviderRequest.builder()
                 .credentials(credentials)
+                .environment(environment)
                 .paymentId(payment.getPaymentId())
                 .amount(payment.getAmount().longValue())
                 .country(payment.getCountry())
@@ -306,7 +285,9 @@ public class MerchantPayInService {
         }
         return result.getErrorType() == ErrorType.NETWORK
                 || result.getErrorType() == ErrorType.TIMEOUT
-                || result.getErrorType() == ErrorType.PROVIDER_DOWN;
+                || result.getErrorType() == ErrorType.PROVIDER_DOWN
+                || result.getErrorType() == ErrorType.AUTHENTICATION
+                || result.getErrorType() == ErrorType.INTERNAL_ERROR;
     }
 
     private String determineFailureReason(PaymentResult result) {
@@ -322,24 +303,6 @@ public class MerchantPayInService {
             case INTERNAL_ERROR -> "INTERNAL_ERROR";
             default -> "GENERIC_FAILURE";
         };
-    }
-
-    private void applyProviderStatus(Payment payment, PaymentStatus status, String source) {
-        payment.setStatus(status);
-        payment.setUpdatedAt(LocalDateTime.now());
-        if (status == PaymentStatus.SUCCESS) {
-            payment.setFailureReason(null);
-        } else if (status == PaymentStatus.FAILED || status == PaymentStatus.CANCELLED) {
-            payment.setFailureReason(source + "_" + status.name());
-        }
-        paymentRepository.save(payment);
-        if (isTerminal(status)) {
-            webhookService.sendWebhook(payment);
-        }
-    }
-
-    private boolean isTerminal(PaymentStatus status) {
-        return status == PaymentStatus.SUCCESS || status == PaymentStatus.FAILED || status == PaymentStatus.CANCELLED;
     }
 
     private void assertOwner(MerchantApiPrincipal principal, Payment payment) {
@@ -364,6 +327,7 @@ public class MerchantPayInService {
                 .status(payment.getStatus())
                 .paymentUrl(payment.getPaymentUrl())
                 .provider(payment.getProvider())
+                .flowType(payment.getFlowType())
                 .operator(payment.getOperator())
                 .country(payment.getCountry())
                 .amount(payment.getAmount())
@@ -383,5 +347,11 @@ public class MerchantPayInService {
         if ("FREE".equals(normalized) || "FREEMONEY".equals(normalized) || "MIXX BY YAS".equals(normalized)) return "MIXX";
         if ("TMONEY".equals(normalized) || "T-MONEY".equals(normalized) || "MIXXBYYAS".equals(normalized)) return "MIXX";
         return normalized;
+    }
+
+    private boolean requiresPhone(String country, String operator) {
+        return !"INT".equals(country)
+                && !"VISA".equals(operator)
+                && !"MASTERCARD".equals(operator);
     }
 }

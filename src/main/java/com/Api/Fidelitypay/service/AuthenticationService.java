@@ -83,8 +83,6 @@ public class AuthenticationService {
                 .role(role)
                 .applicationName(request.getApplicationName())
                 .countries(request.getCountries())
-                .callbackUrl(request.getCallbackUrl() != null ? request.getCallbackUrl() : "")
-                .redirectUrl(request.getRedirectUrl() != null ? request.getRedirectUrl() : "")
                 .isActive(true)
                 .build();
 

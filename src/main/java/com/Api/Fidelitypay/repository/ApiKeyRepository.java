@@ -26,11 +26,6 @@ public interface ApiKeyRepository extends JpaRepository<ApiKey, String> {
     List<ApiKey> findByUserIdAndIsActive(String userId, boolean isActive);
 
     /**
-     * Find API keys by environment (sandbox/live) for a user
-     */
-    List<ApiKey> findByUserIdAndEnvironment(String userId, String environment);
-
-    /**
      * Find by public key
      */
     Optional<ApiKey> findByPublicKey(String publicKey);

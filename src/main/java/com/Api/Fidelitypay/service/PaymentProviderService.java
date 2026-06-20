@@ -123,7 +123,8 @@ public class PaymentProviderService {
                 .country(route.getCountry())
                 .operator(route.getOperator())
                 .flowType(route.getFlowType())
-                .environment(route.getEnvironment())
+                .liveEnabled(route.isLiveEnabled())
+                .sandboxEnabled(route.isSandboxEnabled())
                 .providerChannel(route.getProviderChannel())
                 .priority(route.getPriority())
                 .merchantPriority(merchantPriority)
@@ -153,9 +154,8 @@ public class PaymentProviderService {
         route.setCountry(request.getCountry());
         route.setOperator(request.getOperator());
         route.setFlowType(request.getFlowType());
-        route.setEnvironment(request.getEnvironment() == null || request.getEnvironment().isBlank()
-                ? "LIVE"
-                : request.getEnvironment());
+        route.setLiveEnabled(request.isLiveEnabled());
+        route.setSandboxEnabled(request.isSandboxEnabled());
         route.setProviderChannel(request.getProviderChannel());
         route.setEnabled(request.isEnabled());
         route.setPriority(request.getPriority());

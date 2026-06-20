@@ -38,7 +38,6 @@ public class MerchantPaymentRequest {
 
     @Data
     public static class Customer {
-        @NotBlank
         @Size(max = 50)
         private String phone;
 

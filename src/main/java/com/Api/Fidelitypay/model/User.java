@@ -44,14 +44,6 @@ public class User implements UserDetails {
     @Column(name = "country")
     private List<String> countries;
 
-    @Builder.Default
-    @Column(nullable = true)
-    private String callbackUrl = "";
-
-    @Builder.Default
-    @Column(nullable = true)
-    private String redirectUrl = "";
-
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

@@ -32,6 +32,8 @@ import java.util.Map;
 @Slf4j
 public class PayDunyaClient implements PayInProviderClient {
 
+    private static final String SANDBOX_BASE_URL = "https://app.paydunya.com/sandbox-api/v1";
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PaydunyaProperties paydunyaProperties;
@@ -83,7 +85,7 @@ public class PayDunyaClient implements PayInProviderClient {
 
         try {
             log.info("PayDunya Attempt | URL={} | MasterKey={} | PrivateKey={} | Token={}",
-                    paydunyaProperties.getApi().getBaseUrl(),
+                    resolveBaseUrl(request),
                     mask(resolveMasterKey(request.getCredentials())),
                     mask(resolvePrivateKey(request.getCredentials())),
                     mask(resolveToken(request.getCredentials())));
@@ -108,7 +110,7 @@ public class PayDunyaClient implements PayInProviderClient {
             payload.setCustom_data(Map.of("paymentId", request.getPaymentId() != null ? request.getPaymentId() : ""));
 
             ResponseEntity<String> response = restTemplate.postForEntity(
-                    paydunyaProperties.getApi().getBaseUrl() + "/checkout-invoice/create",
+                    resolveBaseUrl(request) + "/checkout-invoice/create",
                     new HttpEntity<>(payload, headers),
                     String.class);
 
@@ -165,11 +167,26 @@ public class PayDunyaClient implements PayInProviderClient {
         }
     }
 
+    private String resolveBaseUrl(PayInProviderRequest request) {
+        return resolveBaseUrl(request.getCredentials(), request.getEnvironment());
+    }
+
+    private String resolveBaseUrl(ProviderCredentials credentials, String environment) {
+        String configured = credentials == null ? null : credentials.get("baseUrl");
+        if (configured != null && !configured.isBlank()) {
+            return configured.trim();
+        }
+        return "SANDBOX".equalsIgnoreCase(environment)
+                ? SANDBOX_BASE_URL
+                : paydunyaProperties.getApi().getBaseUrl();
+    }
+
     @Override
     public PaymentStatus checkStatus(String providerPaymentId, ProviderCredentials credentials) {
         try {
             ResponseEntity<String> response = restTemplate.exchange(
-                    paydunyaProperties.getApi().getBaseUrl() + "/checkout-invoice/confirm/" + providerPaymentId,
+                    resolveBaseUrl(credentials, credentials == null ? null : credentials.get("_environment"))
+                            + "/checkout-invoice/confirm/" + providerPaymentId,
                     HttpMethod.GET,
                     new HttpEntity<>(createHeaders(credentials)),
                     String.class);

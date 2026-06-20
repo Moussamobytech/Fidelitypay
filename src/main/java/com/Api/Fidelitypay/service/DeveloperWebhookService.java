@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -51,6 +52,7 @@ public class DeveloperWebhookService {
      */
     @Transactional
     public WebhookResponse createWebhook(String userId, CreateWebhookRequest request) {
+        validatePublicHttpsUrl(request.getUrl());
         // Check if webhook already exists
         if (webhookRepository.existsByUserIdAndUrlAndEvent(userId, request.getUrl(), request.getEvent())) {
             throw new IllegalArgumentException("Webhook already exists for this URL and event");
@@ -72,7 +74,7 @@ public class DeveloperWebhookService {
         Webhook saved = webhookRepository.save(webhook);
         log.info("✅ Created webhook for user {} - Event: {}", userId, request.getEvent());
 
-        return toResponse(saved);
+        return toResponseWithSecret(saved);
     }
 
     /**
@@ -146,6 +148,49 @@ public class DeveloperWebhookService {
         return "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    private void validatePublicHttpsUrl(String value) {
+        try {
+            URI uri = URI.create(value.trim());
+            String host = uri.getHost();
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || host == null || host.isBlank()) {
+                throw new IllegalArgumentException("Webhook URL must be a valid HTTPS URL");
+            }
+            String normalizedHost = host.toLowerCase();
+            if (normalizedHost.equals("localhost")
+                    || normalizedHost.endsWith(".localhost")
+                    || normalizedHost.endsWith(".local")
+                    || normalizedHost.endsWith(".internal")
+                    || isPrivateIpv4(normalizedHost)
+                    || isPrivateIpv6(normalizedHost)) {
+                throw new IllegalArgumentException("Webhook URL must use a public Internet host");
+            }
+        } catch (IllegalArgumentException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Webhook URL must be a valid public HTTPS URL", exception);
+        }
+    }
+
+    private boolean isPrivateIpv4(String host) {
+        if (!host.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return false;
+        String[] parts = host.split("\\.");
+        int first = Integer.parseInt(parts[0]);
+        int second = Integer.parseInt(parts[1]);
+        return first == 0 || first == 10 || first == 127
+                || (first == 169 && second == 254)
+                || (first == 172 && second >= 16 && second <= 31)
+                || (first == 192 && second == 168)
+                || first >= 224;
+    }
+
+    private boolean isPrivateIpv6(String host) {
+        String normalized = host.toLowerCase();
+        return normalized.equals("::") || normalized.equals("::1")
+                || normalized.startsWith("fc") || normalized.startsWith("fd")
+                || normalized.startsWith("fe8") || normalized.startsWith("fe9")
+                || normalized.startsWith("fea") || normalized.startsWith("feb");
+    }
+
     /**
      * Convert Webhook entity to response DTO
      */
@@ -161,5 +206,11 @@ public class DeveloperWebhookService {
                 .failureCount(webhook.getFailureCount())
                 .createdAt(webhook.getCreatedAt())
                 .build();
+    }
+
+    private WebhookResponse toResponseWithSecret(Webhook webhook) {
+        WebhookResponse response = toResponse(webhook);
+        response.setSecret(webhook.getSecret());
+        return response;
     }
 }

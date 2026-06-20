@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,7 +57,7 @@ class MerchantPayInServiceTest {
         webhookService = mock(WebhookService.class);
         providerAccountService = mock(MerchantProviderAccountService.class);
         service = new MerchantPayInService(paymentRepository, logEntryRepository, routeService, kkiapayClient, payDunyaClient, webhookService,
-                providerAccountService);
+                providerAccountService, new PaymentStateTransitionService());
         ReflectionTestUtils.setField(service, "allowGlobalCredentialsFallback", true);
 
         User user = User.builder()
@@ -70,7 +71,7 @@ class MerchantPayInServiceTest {
         ApiKey apiKey = ApiKey.builder()
                 .id("key-1")
                 .userId("user-1")
-                .publicKey("pk_sandbox_test")
+                .publicKey("pk_test")
                 .environment("sandbox")
                 .isActive(true)
                 .build();
@@ -161,6 +162,31 @@ class MerchantPayInServiceTest {
     }
 
     @Test
+    void initiate_fallbacksWhenPrimaryProviderCredentialsAreRejected() {
+        when(paymentRepository.findByApiKeyIdAndIdempotencyKey("key-1", "idem-auth"))
+                .thenReturn(Optional.empty());
+        when(routeService.findAvailablePayIn("CI", "MOOV", "SANDBOX", "user-1")).thenReturn(List.of(
+                route("KKIAPAY", "CI", "MOOV", PaymentFlowType.MOBILE_MONEY_REQUEST, 10),
+                route("PAYDUNYA", "CI", "MOOV", PaymentFlowType.HOSTED_CHECKOUT, 20)));
+
+        PaymentResult authenticationFailure = new PaymentResult(false);
+        authenticationFailure.setErrorType(ErrorType.AUTHENTICATION);
+        when(kkiapayClient.initiatePayIn(any())).thenReturn(authenticationFailure);
+
+        PaymentResult paydunyaSuccess = new PaymentResult(true);
+        paydunyaSuccess.setProviderId("paydunya-token");
+        paydunyaSuccess.setPaymentUrl("https://paydunya/checkout");
+        when(payDunyaClient.initiatePayIn(any())).thenReturn(paydunyaSuccess);
+
+        MerchantPaymentResponse response = service.initiate(principal, request("CI", "MOOV"), "idem-auth");
+
+        assertEquals(PaymentStatus.PENDING, response.getStatus());
+        assertEquals("PAYDUNYA", response.getProvider());
+        assertEquals("https://paydunya/checkout", response.getPaymentUrl());
+        verify(payDunyaClient).initiatePayIn(any());
+    }
+
+    @Test
     void initiate_doesNotFallbackForBadRequest() {
         when(paymentRepository.findByApiKeyIdAndIdempotencyKey("key-1", "idem-5")).thenReturn(Optional.empty());
         when(routeService.findAvailablePayIn("SN", "WAVE", "SANDBOX", "user-1")).thenReturn(List.of(
@@ -200,6 +226,37 @@ class MerchantPayInServiceTest {
         verify(webhookService).sendWebhook(any(Payment.class));
     }
 
+    @Test
+    void initiate_allowsCardPaymentWithoutPhone() {
+        MerchantPaymentRequest cardRequest = request("INT", "VISA");
+        cardRequest.getCustomer().setPhone(null);
+        when(paymentRepository.findByApiKeyIdAndIdempotencyKey("key-1", "idem-card")).thenReturn(Optional.empty());
+        when(routeService.findAvailablePayIn("INT", "VISA", "SANDBOX", "user-1")).thenReturn(List.of(
+                route("PAYDUNYA", "INT", "VISA", PaymentFlowType.HOSTED_CHECKOUT, 10)));
+
+        PaymentResult success = new PaymentResult(true);
+        success.setProviderId("card-checkout");
+        success.setPaymentUrl("https://paydunya/checkout/card");
+        when(payDunyaClient.initiatePayIn(any())).thenReturn(success);
+
+        MerchantPaymentResponse response = service.initiate(principal, cardRequest, "idem-card");
+
+        assertEquals(PaymentStatus.PENDING, response.getStatus());
+        assertEquals("HOSTED_CHECKOUT", response.getFlowType());
+    }
+
+    @Test
+    void initiate_rejectsMobileMoneyWithoutPhone() {
+        MerchantPaymentRequest mobileRequest = request("SN", "WAVE");
+        mobileRequest.getCustomer().setPhone(" ");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.initiate(principal, mobileRequest, "idem-mobile"));
+
+        assertEquals("customer.phone is required for mobile-money payments", error.getMessage());
+        verifyNoInteractions(routeService, kkiapayClient, payDunyaClient);
+    }
+
     private MerchantPaymentRequest request(String country, String operator) {
         MerchantPaymentRequest request = new MerchantPaymentRequest();
         request.setAmount(5_000);
@@ -224,7 +281,8 @@ class MerchantPayInServiceTest {
         route.setOperator(operator);
         route.setFlowType(flowType);
         route.setProviderChannel(provider.toLowerCase() + "-" + operator.toLowerCase());
-        route.setEnvironment("SANDBOX");
+        route.setLiveEnabled(true);
+        route.setSandboxEnabled(true);
         route.setPriority(priority);
         route.setEnabled(true);
         return route;

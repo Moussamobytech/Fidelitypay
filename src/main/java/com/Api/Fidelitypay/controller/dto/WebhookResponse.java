@@ -1,5 +1,6 @@
 package com.Api.Fidelitypay.controller.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,8 @@ public class WebhookResponse {
     private String url;
     private String event;
     private String description;
+    private String secret;
+    @JsonProperty("isActive")
     private boolean isActive;
     private LocalDateTime lastTriggeredAt;
     private Integer lastStatusCode;

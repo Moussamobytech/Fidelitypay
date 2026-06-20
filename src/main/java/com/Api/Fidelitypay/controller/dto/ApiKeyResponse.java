@@ -20,19 +20,15 @@ public class ApiKeyResponse {
 
     private String id;
     private String name;
-    private String publicKey;
+    /** Full API key, returned only when the key is created. */
+    private String apiKey;
 
     /**
      * Only shown after creation, null afterwards
      */
-    private String secretKey;
+    /** Masked key shown in subsequent list responses. */
+    private String apiKeyMasked;
 
-    /**
-     * Masked version for display (e.g., "sk_live_****1234")
-     */
-    private String secretKeyMasked;
-
-    private String environment;
     @JsonProperty("isActive")
     private boolean isActive;
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")

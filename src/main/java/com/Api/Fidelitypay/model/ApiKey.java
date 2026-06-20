@@ -21,7 +21,6 @@ import java.time.LocalDateTime;
 @Table(name = "api_keys", indexes = {
         @Index(name = "idx_api_key_user_id", columnList = "userId"),
         @Index(name = "idx_api_key_public_key", columnList = "publicKey"),
-        @Index(name = "idx_api_key_environment", columnList = "environment"),
         @Index(name = "idx_api_key_active", columnList = "isActive")
 })
 public class ApiKey {
@@ -44,13 +43,13 @@ public class ApiKey {
     private String name;
 
     /**
-     * Public key identifier (pk_live_... or pk_sandbox_...)
+     * Public key identifier (pk_...)
      */
     @Column(nullable = false, unique = true, length = 255)
     private String publicKey;
 
     /**
-     * Hashed secret key (sk_live_... or sk_sandbox_...)
+     * Hashed secret key (sk_...)
      * NEVER store the actual secret key in plain text!
      * Use BCrypt or similar strong hashing algorithm
      */
@@ -64,9 +63,10 @@ public class ApiKey {
     private String secretKeyHint;
 
     /**
-     * Environment: sandbox or live
+     * Legacy field kept for existing database rows. Runtime environment is defined
+     * by provider accounts, not by API keys.
      */
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private String environment;
 
     /**

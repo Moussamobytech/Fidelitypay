@@ -1,9 +1,6 @@
 package com.Api.Fidelitypay.service;
 
-import com.Api.Fidelitypay.controller.dto.MonitoringRouteResponse;
-import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.enums.LogStatus;
-import com.Api.Fidelitypay.enums.PaymentProviderStatus;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
 import com.Api.Fidelitypay.model.LogEntry;
@@ -40,7 +37,7 @@ public class MonitoringService {
 
     @Scheduled(fixedRateString = "${monitoring.interval:300000}")
     public void checkRoutes() {
-        for (PaymentProviderRoute route : routeRepository.findAll()) {
+        for (PaymentProviderRoute route : routeRepository.findAllWithProviderOrderByCountryAscOperatorAscPriorityAsc()) {
             long start = System.nanoTime();
             boolean isUp;
             String errorMessage = null;
@@ -66,17 +63,6 @@ public class MonitoringService {
             log.info("Provider route {} -> UP={}, latency={}ms, error={}", routeName(route), isUp, latencyMs,
                     errorMessage);
         }
-    }
-
-    public List<MonitoringRouteResponse> getAllRoutes() {
-        return routeRepository.findAll().stream().map(this::toResponse).toList();
-    }
-
-    public MonitoringRouteResponse toggleRoute(Long id, boolean enabled) {
-        PaymentProviderRoute route = routeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Route not found with ID: " + id));
-        route.setEnabled(enabled);
-        return toResponse(routeRepository.save(route));
     }
 
     private boolean isProviderAvailable(PaymentProviderRoute route) {
@@ -110,26 +96,6 @@ public class MonitoringService {
         }
         long failed = recentLogs.stream().filter(log -> log.getStatus() == LogStatus.FAILED).count();
         return (double) failed / recentLogs.size();
-    }
-
-    private MonitoringRouteResponse toResponse(PaymentProviderRoute route) {
-        boolean available = route.isEnabled()
-                && route.getProvider().getStatus() == PaymentProviderStatus.ACTIVE;
-        return MonitoringRouteResponse.builder()
-                .id(route.getId())
-                .name(routeName(route))
-                .provider(route.getProvider().getCode())
-                .operator(route.getOperator())
-                .country(route.getCountry())
-                .availability(available)
-                .avgLatency(route.getAvgLatency())
-                .cost(route.getCost())
-                .failureRate(route.getFailureRate())
-                .priority(route.getPriority())
-                .lastErrorMessage(route.getLastErrorMessage())
-                .lastErrorType(available ? null : ErrorType.PROVIDER_DOWN)
-                .updatedAt(route.getUpdatedAt())
-                .build();
     }
 
     private String routeName(PaymentProviderRoute route) {

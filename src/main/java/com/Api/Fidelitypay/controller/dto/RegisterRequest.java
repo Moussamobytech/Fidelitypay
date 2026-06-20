@@ -37,8 +37,4 @@ public class RegisterRequest {
     @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
     private List<String> countries;
 
-    private String callbackUrl;
-
-    // Optional redirect URL after auth flow
-    private String redirectUrl;
 }

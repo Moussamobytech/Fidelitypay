@@ -29,6 +29,7 @@ public class MerchantPaymentRouteSettingService {
         Map<Long, MerchantPaymentRouteSetting> settingsByRoute = settingsByRoute(userId);
         return routeRepository.findByDirectionWithProviderOrderByCountryAscOperatorAscPriorityAsc(PaymentDirection.PAYIN)
                 .stream()
+                .filter(PaymentProviderRoute::isEnabled)
                 .map(route -> {
                     MerchantPaymentRouteSetting setting = settingsByRoute.get(route.getId());
                     Integer merchantPriority = setting == null ? null : setting.getPriority();

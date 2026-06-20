@@ -18,6 +18,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByPaymentId(String paymentId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.paymentId = :paymentId")
+    Optional<Payment> findByPaymentIdForUpdate(@Param("paymentId") String paymentId);
+
     Optional<Payment> findByApiKeyIdAndIdempotencyKey(String apiKeyId, String idempotencyKey);
 
     @Query("SELECT p FROM Payment p WHERE p.user.id = :userId ORDER BY p.createdAt DESC")

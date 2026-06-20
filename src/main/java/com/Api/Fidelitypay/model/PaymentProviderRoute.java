@@ -24,12 +24,12 @@ import java.time.LocalDateTime;
 @Entity
 @Data
 @Table(name = "payment_provider_routes", indexes = {
-        @Index(name = "idx_provider_route_lookup", columnList = "direction,country,operator,environment,enabled"),
+        @Index(name = "idx_provider_route_lookup", columnList = "direction,country,operator,enabled"),
         @Index(name = "idx_provider_route_priority", columnList = "direction,country,operator,priority"),
         @Index(name = "idx_provider_route_provider", columnList = "provider_id")
 }, uniqueConstraints = {
         @UniqueConstraint(name = "uk_payment_provider_route", columnNames = {
-                "provider_id", "direction", "country", "operator", "flow_type", "environment"
+                "provider_id", "direction", "country", "operator", "flow_type"
         })
 })
 public class PaymentProviderRoute {
@@ -56,8 +56,11 @@ public class PaymentProviderRoute {
     @Column(name = "flow_type", nullable = false, length = 40)
     private PaymentFlowType flowType;
 
-    @Column(nullable = false, length = 20)
-    private String environment = "LIVE";
+    @Column(name = "live_enabled", nullable = false)
+    private boolean liveEnabled = true;
+
+    @Column(name = "sandbox_enabled", nullable = false)
+    private boolean sandboxEnabled = true;
 
     @Column(nullable = false, length = 100)
     private String providerChannel;
@@ -90,7 +93,6 @@ public class PaymentProviderRoute {
     public void normalize() {
         this.country = normalize(country);
         this.operator = normalize(operator);
-        this.environment = normalize(environment);
         this.updatedAt = LocalDateTime.now();
     }
 

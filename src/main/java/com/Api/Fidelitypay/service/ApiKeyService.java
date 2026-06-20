@@ -2,6 +2,7 @@ package com.Api.Fidelitypay.service;
 
 import com.Api.Fidelitypay.controller.dto.ApiKeyResponse;
 import com.Api.Fidelitypay.controller.dto.CreateApiKeyRequest;
+import com.Api.Fidelitypay.controller.dto.UpdateApiKeyRequest;
 import com.Api.Fidelitypay.model.ApiKey;
 import com.Api.Fidelitypay.repository.ApiKeyRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,10 +31,10 @@ public class ApiKeyService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
-     * Get all API keys for a user (without secret keys)
+     * Get active API keys for a user without complete key values.
      */
     public List<ApiKeyResponse> getUserApiKeys(String userId) {
-        List<ApiKey> keys = apiKeyRepository.findByUserId(userId);
+        List<ApiKey> keys = apiKeyRepository.findByUserIdAndIsActive(userId, true);
         return keys.stream()
                 .map(this::toResponseWithoutSecret)
                 .collect(Collectors.toList());
@@ -63,73 +64,76 @@ public class ApiKeyService {
     }
 
     /**
-     * Get API keys by environment
-     */
-    public List<ApiKeyResponse> getUserApiKeysByEnvironment(String userId, String environment) {
-        List<ApiKey> keys = apiKeyRepository.findByUserIdAndEnvironment(userId, environment);
-        return keys.stream()
-                .map(this::toResponseWithoutSecret)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Create a new API key pair
-     * IMPORTANT: The secret key is returned ONLY ONCE - it will NOT be retrievable
-     * later
+     * Create one opaque API key. Its lookup identifier is stored in plain text and
+     * its secret part is hashed. The complete key is returned only once.
      */
     @Transactional
     public ApiKeyResponse createApiKey(String userId, CreateApiKeyRequest request) {
         // Generate unique keys
-        String publicKey = generatePublicKey(request.getEnvironment());
-        String secretKey = generateSecretKey(request.getEnvironment());
+        String keyIdentifier = generateKeyIdentifier();
+        String keySecret = generateKeySecret();
 
         // Ensure uniqueness
-        while (apiKeyRepository.existsByPublicKey(publicKey)) {
-            publicKey = generatePublicKey(request.getEnvironment());
+        while (apiKeyRepository.existsByPublicKey(keyIdentifier)) {
+            keyIdentifier = generateKeyIdentifier();
         }
 
         // Hash the secret key for storage
-        String secretKeyHash = passwordEncoder.encode(secretKey);
+        String secretKeyHash = passwordEncoder.encode(keySecret);
 
         // Extract last 4 characters for display hint
-        String secretKeyHint = secretKey.substring(secretKey.length() - 4);
+        String secretKeyHint = keySecret.substring(keySecret.length() - 4);
 
         // Create and save the API key
         ApiKey apiKey = ApiKey.builder()
                 .userId(userId)
                 .name(request.getName())
-                .publicKey(publicKey)
+                .publicKey(keyIdentifier)
                 .secretKeyHash(secretKeyHash)
                 .secretKeyHint(secretKeyHint)
-                .environment(request.getEnvironment())
+                .environment("GLOBAL")
                 .isActive(true)
                 .build();
 
         ApiKey savedKey = apiKeyRepository.save(apiKey);
 
-        log.info("✅ Created new API key for user {} in {} environment", userId, request.getEnvironment());
+        log.info("✅ Created new API key for user {}", userId);
 
-        // Return response with the ACTUAL secret key (only time it's shown)
-        return toResponseWithSecret(savedKey, secretKey);
+        return toResponseWithKey(savedKey, formatApiKey(keyIdentifier, keySecret));
     }
 
     /**
-     * Revoke (deactivate) an API key
+     * Rename an active API key owned by a user.
      */
     @Transactional
-    public void revokeApiKey(String userId, String keyId) {
-        ApiKey apiKey = apiKeyRepository.findById(keyId)
-                .orElseThrow(() -> new IllegalArgumentException("API key not found"));
+    public ApiKeyResponse renameApiKey(String userId, String keyId, UpdateApiKeyRequest request) {
+        ApiKey apiKey = findOwnedApiKey(userId, keyId);
 
-        // Verify ownership if userId is provided
-        if (userId != null && !apiKey.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Unauthorized: You don't own this API key");
+        if (!apiKey.isActive()) {
+            throw new IllegalArgumentException("API key not found");
         }
 
+        apiKey.setName(request.getName().trim());
+        ApiKey savedKey = apiKeyRepository.save(apiKey);
+
+        log.info("Renamed API key {} for user {}", keyId, userId);
+        return toResponseWithoutSecret(savedKey);
+    }
+
+    /**
+     * Delete a merchant key from the merchant experience.
+     *
+     * The key is kept inactive internally so past payments and audits keep their key
+     * reference, but it disappears from merchant key listings and cannot
+     * authenticate.
+     */
+    @Transactional
+    public void deleteApiKey(String userId, String keyId) {
+        ApiKey apiKey = findOwnedApiKey(userId, keyId);
         apiKey.setActive(false);
         apiKeyRepository.save(apiKey);
 
-        log.info("🔒 Revoked API key {} for user {}", keyId, userId != null ? userId : "ADMIN");
+        log.info("Deleted API key {} for user {}", keyId, userId);
     }
 
     /**
@@ -157,59 +161,20 @@ public class ApiKeyService {
     }
 
     /**
-     * Rotate API keys - revoke all old keys and create new ones
-     * This is a sensitive operation that should require additional confirmation
-     */
-    @Transactional
-    public List<ApiKeyResponse> rotateApiKeys(String userId) {
-        // Revoke all existing active keys
-        List<ApiKey> existingKeys = apiKeyRepository.findByUserIdAndIsActive(userId, true);
-        existingKeys.forEach(key -> key.setActive(false));
-        apiKeyRepository.saveAll(existingKeys);
-
-        log.warn("🔄 Rotating all API keys for user {} - {} keys revoked", userId, existingKeys.size());
-
-        // Create new keys for each environment that had active keys
-        boolean hadSandbox = existingKeys.stream().anyMatch(k -> "sandbox".equals(k.getEnvironment()));
-        boolean hadLive = existingKeys.stream().anyMatch(k -> "live".equals(k.getEnvironment()));
-
-        List<ApiKeyResponse> newKeys = new java.util.ArrayList<>();
-
-        if (hadSandbox) {
-            CreateApiKeyRequest sandboxRequest = CreateApiKeyRequest.builder()
-                    .name("Rotated Sandbox Key")
-                    .environment("sandbox")
-                    .build();
-            newKeys.add(createApiKey(userId, sandboxRequest));
-        }
-
-        if (hadLive) {
-            CreateApiKeyRequest liveRequest = CreateApiKeyRequest.builder()
-                    .name("Rotated Live Key")
-                    .environment("live")
-                    .build();
-            newKeys.add(createApiKey(userId, liveRequest));
-        }
-
-        return newKeys;
-    }
-
-    /**
      * Validate an API key (used in API authentication)
      */
-    public boolean validateApiKey(String publicKey, String secretKey) {
-        return apiKeyRepository.findByPublicKeyAndIsActive(publicKey, true)
-                .map(apiKey -> passwordEncoder.matches(secretKey, apiKey.getSecretKeyHash()))
-                .orElse(false);
+    public boolean validateApiKey(String rawApiKey) {
+        return authenticateApiKey(rawApiKey).isPresent();
     }
 
-    public java.util.Optional<ApiKey> authenticateApiKey(String publicKey, String secretKey) {
-        if (publicKey == null || publicKey.isBlank() || secretKey == null || secretKey.isBlank()) {
+    public java.util.Optional<ApiKey> authenticateApiKey(String rawApiKey) {
+        ParsedApiKey parsed = parseApiKey(rawApiKey);
+        if (parsed == null) {
             return java.util.Optional.empty();
         }
-        return apiKeyRepository.findByPublicKeyAndIsActive(publicKey.trim(), true)
+        return apiKeyRepository.findByPublicKeyAndIsActive(parsed.identifier(), true)
                 .filter(apiKey -> apiKey.getExpiresAt() == null || apiKey.getExpiresAt().isAfter(LocalDateTime.now()))
-                .filter(apiKey -> passwordEncoder.matches(secretKey.trim(), apiKey.getSecretKeyHash()));
+                .filter(apiKey -> passwordEncoder.matches(parsed.secret(), apiKey.getSecretKeyHash()));
     }
 
     /**
@@ -225,19 +190,17 @@ public class ApiKeyService {
     }
 
     /**
-     * Generate a public key in format: pk_{env}_{random}
+     * Generate the lookup portion of an API key.
      */
-    private String generatePublicKey(String environment) {
-        String prefix = "pk_" + environment + "_";
-        return prefix + generateRandomString(32);
+    private String generateKeyIdentifier() {
+        return "fp_" + generateRandomString(32);
     }
 
     /**
-     * Generate a secret key in format: sk_{env}_{random}
+     * Generate the secret portion of an API key.
      */
-    private String generateSecretKey(String environment) {
-        String prefix = "sk_" + environment + "_";
-        return prefix + generateRandomString(48);
+    private String generateKeySecret() {
+        return generateRandomString(48);
     }
 
     /**
@@ -252,17 +215,26 @@ public class ApiKeyService {
                 .substring(0, length);
     }
 
+    private ApiKey findOwnedApiKey(String userId, String keyId) {
+        ApiKey apiKey = apiKeyRepository.findById(keyId)
+                .orElseThrow(() -> new IllegalArgumentException("API key not found"));
+
+        if (userId != null && !apiKey.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Unauthorized: You don't own this API key");
+        }
+
+        return apiKey;
+    }
+
     /**
-     * Convert ApiKey entity to response DTO WITHOUT secret key
+     * Convert an entity to a masked response.
      */
     private ApiKeyResponse toResponseWithoutSecret(ApiKey apiKey) {
         return ApiKeyResponse.builder()
                 .id(apiKey.getId())
                 .name(apiKey.getName())
-                .publicKey(apiKey.getPublicKey())
-                .secretKey(null) // Never expose the secret key after creation
-                .secretKeyMasked(maskSecretKey(apiKey))
-                .environment(apiKey.getEnvironment())
+                .apiKey(null)
+                .apiKeyMasked(maskApiKey(apiKey))
                 .isActive(apiKey.isActive())
                 .createdAt(apiKey.getCreatedAt())
                 .lastUsedAt(apiKey.getLastUsedAt())
@@ -273,19 +245,41 @@ public class ApiKeyService {
     }
 
     /**
-     * Convert ApiKey entity to response DTO WITH secret key (only for creation)
+     * Include the complete API key only in the creation response.
      */
-    private ApiKeyResponse toResponseWithSecret(ApiKey apiKey, String secretKey) {
+    private ApiKeyResponse toResponseWithKey(ApiKey apiKey, String rawApiKey) {
         ApiKeyResponse response = toResponseWithoutSecret(apiKey);
-        response.setSecretKey(secretKey); // Only set during creation
+        response.setApiKey(rawApiKey);
         return response;
     }
 
     /**
-     * Mask secret key for display (e.g., "sk_live_****1234")
+     * Mask an API key for later display.
      */
-    private String maskSecretKey(ApiKey apiKey) {
-        String prefix = "sk_" + apiKey.getEnvironment() + "_";
-        return prefix + "****" + apiKey.getSecretKeyHint();
+    private String maskApiKey(ApiKey apiKey) {
+        return apiKey.getPublicKey() + ".****" + apiKey.getSecretKeyHint();
     }
+
+    private String formatApiKey(String identifier, String secret) {
+        return identifier + "." + secret;
+    }
+
+    private ParsedApiKey parseApiKey(String rawApiKey) {
+        if (rawApiKey == null) {
+            return null;
+        }
+        String value = rawApiKey.trim();
+        int separator = value.indexOf('.');
+        if (separator <= 3 || separator == value.length() - 1) {
+            return null;
+        }
+        String identifier = value.substring(0, separator);
+        String secret = value.substring(separator + 1);
+        if (!identifier.startsWith("fp_") || secret.isBlank()) {
+            return null;
+        }
+        return new ParsedApiKey(identifier, secret);
+    }
+
+    private record ParsedApiKey(String identifier, String secret) {}
 }

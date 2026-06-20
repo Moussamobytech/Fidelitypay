@@ -11,4 +11,5 @@ public class MerchantApiPrincipal {
     private ApiKey apiKey;
     private User user;
     private String environment;
+    private String initiationSource;
 }

@@ -11,7 +11,8 @@ public class PaymentProviderRouteRequest {
     private String country;
     private String operator;
     private PaymentFlowType flowType;
-    private String environment = "LIVE";
+    private boolean liveEnabled = true;
+    private boolean sandboxEnabled = true;
     private String providerChannel;
     private boolean enabled = true;
     private int priority = 100;

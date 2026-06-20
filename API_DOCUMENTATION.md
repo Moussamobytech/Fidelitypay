@@ -6,8 +6,7 @@ Cette documentation couvre le pay-in marchand. Les endpoints dashboard/admin uti
 
 Chaque appel marchand doit envoyer:
 
-- `X-API-Public-Key`: clé publique du marchand
-- `X-API-Secret-Key`: secret associé, affiché une seule fois à la création
+- `X-API-Key`: clé unique du marchand, affichée une seule fois à la création
 - `Idempotency-Key`: identifiant unique de la tentative côté marchand
 - `Content-Type: application/json`
 
@@ -33,15 +32,14 @@ URL locale: `http://localhost:8060/api/v1/payments/initiate`
 }
 ```
 
-`amount` est un entier en XOF. Le routage est fait par correspondance exacte entre `direction=PAYIN`, `country`, `operator`, l'environnement de la clé API, et les routes de paiement actives.
+`amount` est un entier en XOF. Les appels API marchands utilisent les comptes agrégateurs Live. Le téléphone est obligatoire pour le mobile money et optionnel pour Visa/Mastercard.
 
 ### Exemple curl
 
 ```bash
 curl -X POST http://localhost:8060/api/v1/payments/initiate \
   -H "Content-Type: application/json" \
-  -H "X-API-Public-Key: pk_sandbox_xxx" \
-  -H "X-API-Secret-Key: sk_sandbox_xxx" \
+  -H "X-API-Key: fp_xxx.secret_xxx" \
   -H "Idempotency-Key: order-123-init-1" \
   -d '{
     "amount": 5000,
@@ -65,6 +63,7 @@ curl -X POST http://localhost:8060/api/v1/payments/initiate \
   "status": "PENDING",
   "paymentUrl": "https://provider.example/checkout/...",
   "provider": "KKIAPAY",
+  "flowType": "WAVE_REDIRECT",
   "operator": "WAVE",
   "country": "SN",
   "amount": 5000,
@@ -87,7 +86,8 @@ Pour Orange Money Côte d'Ivoire via Kkiapay, la réponse peut être:
   "currency": "XOF",
   "nextAction": {
     "type": "SUBMIT_OTP",
-    "url": "/api/v1/payments/FP-.../actions/otp"
+    "provider": "KKIAPAY",
+    "message": "Submit the Orange Money CI OTP to continue this payment"
   }
 }
 ```
@@ -119,30 +119,23 @@ Même authentification par clés API. Le paiement doit appartenir à la clé API
 - `FAILED`: paiement échoué ou refusé.
 - `CANCELLED`: paiement annulé avant finalisation.
 
-## Capacités pay-in Kkiapay
+## Parcours de paiement
 
-Matrice officielle pay-in actuellement supportée:
+- `MOBILE_MONEY_REQUEST`: le payeur confirme la demande sur son téléphone.
+- `WAVE_REDIRECT`: ouvrez `paymentUrl` pour poursuivre dans Wave.
+- `ORANGE_CI_OTP`: envoyez l'OTP avec l'endpoint d'action.
+- `HOSTED_CHECKOUT`: ouvrez `paymentUrl` et terminez le paiement chez l'agrégateur.
 
-- `BJ`: `MTN`, `MOOV`, `CELTIIS`
-- `CI`: `MTN`, `MOOV`, `OM`, `WAVE`
-- `TG`: `MOOV`, `MIXX`
-- `SN`: `OM`, `MIXX`, `WAVE`
-- `NE`: `AIRTEL`
-
-Alias acceptés: `ORANGE`/`ORANGE_MONEY` vers `OM`, `FREE`/`FREEMONEY`/`MIXX BY YAS` vers `MIXX`.
+La couverture active est exposée dans le dashboard Intégration; elle dépend des agrégateurs et environnements configurés.
 
 ## Callbacks et webhooks
 
-Les callbacks fournisseurs sont internes à Fidelity Pay:
-
-- Kkiapay: `/api/payments/callback/kkiapay`
-- PayDunya: `/api/payments/callback/paydunya`
-
-Les marchands ne configurent pas ces URLs. Ils configurent plutôt des webhooks dashboard via `/api/v1/developer/webhooks`, puis Fidelity Pay envoie les événements:
+Les callbacks fournisseurs sont internes à Fidelity Pay. Les marchands configurent leur webhook dans le dashboard Intégration, puis Fidelity Pay envoie:
 
 - `payment.success`
 - `payment.failed`
 - `payment.cancelled`
 - `payment.requires_action`
+- `payment.reconciliation`
 
 Les notifications développeur sont signées avec `X-FidelityPay-Signature`.

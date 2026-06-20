@@ -14,16 +14,17 @@ public class MerchantApiAuthService {
     private final ApiKeyService apiKeyService;
     private final UserRepository userRepository;
 
-    public MerchantApiPrincipal authenticate(String publicKey, String secretKey, String ipAddress) {
-        ApiKey apiKey = apiKeyService.authenticateApiKey(publicKey, secretKey)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid API key credentials"));
+    public MerchantApiPrincipal authenticate(String rawApiKey, String ipAddress) {
+        ApiKey apiKey = apiKeyService.authenticateApiKey(rawApiKey)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid API key"));
         User user = userRepository.findById(apiKey.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("API key owner not found"));
         apiKeyService.updateLastUsed(apiKey.getPublicKey(), ipAddress);
         return MerchantApiPrincipal.builder()
                 .apiKey(apiKey)
                 .user(user)
-                .environment(apiKey.getEnvironment())
+                .environment("LIVE")
+                .initiationSource("API")
                 .build();
     }
 }

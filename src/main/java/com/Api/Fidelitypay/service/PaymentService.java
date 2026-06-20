@@ -4,6 +4,7 @@ import com.Api.Fidelitypay.enums.PaymentStatus;
 import com.Api.Fidelitypay.enums.LogStatus;
 import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.integration.PayDunyaClient;
+import com.Api.Fidelitypay.integration.PayInProviderRequest;
 import com.Api.Fidelitypay.integration.PaymentResult;
 import com.Api.Fidelitypay.integration.KkiapayClient;
 import com.Api.Fidelitypay.model.LogEntry;
@@ -34,6 +35,7 @@ public class PaymentService {
     private final KkiapayClient kkiapayClient;
     private final PayDunyaClient payDunyaClient;
     private final PaymentRouteService routeService;
+    private final PaymentStateTransitionService transitionService;
 
     public PaymentService(
             PaymentRepository paymentRepository,
@@ -41,13 +43,15 @@ public class PaymentService {
             WebhookService webhookService,
             KkiapayClient kkiapayClient,
             PayDunyaClient payDunyaClient,
-            PaymentRouteService routeService) {
+            PaymentRouteService routeService,
+            PaymentStateTransitionService transitionService) {
         this.paymentRepository = paymentRepository;
         this.logEntryRepository = logEntryRepository;
         this.webhookService = webhookService;
         this.kkiapayClient = kkiapayClient;
         this.payDunyaClient = payDunyaClient;
         this.routeService = routeService;
+        this.transitionService = transitionService;
     }
 
     /**
@@ -87,7 +91,7 @@ public class PaymentService {
 
         // Validation du numéro de téléphone par rapport au pays
         if (!isPhoneNumberValidForCountry(phone, countryCode)) {
-            payment.setStatus(PaymentStatus.FAILED);
+            transitionService.transition(payment, PaymentStatus.FAILED, "PAYMENT_INITIATE");
             payment.setFailureReason("INVALID_PHONE_NUMBER");
             paymentRepository.save(payment);
             log.warn("Invalid phone number {} for country {}", phone, countryCode);
@@ -95,16 +99,11 @@ public class PaymentService {
         }
 
         // 2. Use the same scored provider-route catalog as the merchant API flow.
-        List<String> providersToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
-                        user == null ? null : user.getId())
-                .stream()
-                .map(PaymentProviderRoute::getProvider)
-                .map(provider -> provider.getCode())
-                .distinct()
-                .toList();
+        List<PaymentProviderRoute> routesToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
+                user == null ? null : user.getId());
 
-        if (providersToTry.isEmpty()) {
-            payment.setStatus(PaymentStatus.FAILED);
+        if (routesToTry.isEmpty()) {
+            transitionService.transition(payment, PaymentStatus.FAILED, "PAYMENT_INITIATE");
             payment.setFailureReason("NO_PROVIDER_AVAILABLE_FOR_COUNTRY");
             paymentRepository.save(payment);
             log.warn("No providers configured in dashboard for country {} and operator {}", countryCode, operator);
@@ -112,24 +111,25 @@ public class PaymentService {
         }
 
         PaymentResult finalResult = null;
-        String finalProviderUsed = null;
+        PaymentProviderRoute finalRoute = null;
         boolean success = false;
         int attempt = 0;
-        String primaryProvider = providersToTry.get(0);
+        String primaryProvider = providerCode(routesToTry.get(0));
         boolean fallbackNeededButUnavailable = false;  // ✅ FIX: Track if fallback was needed but no providers left
 
         // 3. Boucle de fallback (essaye chaque provider)
-        for (String providerName : providersToTry) {
+        for (PaymentProviderRoute route : routesToTry) {
             attempt++;
+            String providerName = providerCode(route);
             log.info("🚀 Attempt {}: Trying provider {} for payment {}",
                     attempt, providerName, paymentId);
 
-            PaymentResult result = executeProvider(providerName, amount, countryCode, operator, phone, firstname, lastname, email);
+            PaymentResult result = executeProvider(route, payment, phone, firstname, lastname, email);
 
             if (result != null && result.isSuccess()) {
                 success = true;
                 finalResult = result;
-                finalProviderUsed = providerName;
+                finalRoute = route;
                 payment.setUsedFallback(attempt > 1);
                 payment.setAttemptCount(attempt);
                 if (attempt > 1) {
@@ -147,19 +147,19 @@ public class PaymentService {
 
             // Log de l'échec
             logProviderAttempt(attempt == 1 ? "PRIMARY" : "FALLBACK", providerName, false, errorMsg, errorType);
-            saveLog(paymentId, providerName, result, false, determineFailureReason(errorMsg, errorType),
+            saveLog(paymentId, route, result, false, determineFailureReason(errorMsg, errorType),
                     errorType, attempt > 1, (attempt > 1 ? "MULTI_STEP_FALLBACK" : null), primaryProvider);
 
             // Est-ce une erreur technique permettant de continuer ?
             if (!shouldTriggerFallback(errorMsg, errorType)) {
                 log.warn("❌ Stop fallback: Non-technical error encountered: {}", errorMsg);
                 finalResult = result;
-                finalProviderUsed = providerName;
+                finalRoute = route;
                 break;
             }
 
             // ✅ FIX: Mark if fallback was needed but no more providers available
-            if (attempt >= providersToTry.size()) {
+            if (attempt >= routesToTry.size()) {
                 log.error("❌ All providers failed for operator {}. No fallback available.", operator);
                 fallbackNeededButUnavailable = true;
             } else {
@@ -167,14 +167,14 @@ public class PaymentService {
             }
 
             finalResult = result;
-            finalProviderUsed = providerName;
+            finalRoute = route;
         }
 
         // 4. Finaliser l'initialisation.
         // Un succès fournisseur signifie seulement que le checkout/transaction provider
         // a été créé. Le paiement reste PENDING jusqu'au callback fournisseur final.
-        payment.setStatus(success ? PaymentStatus.PENDING : PaymentStatus.FAILED);
-        payment.setUpdatedAt(LocalDateTime.now());
+        PaymentStateTransitionService.TransitionResult transition =
+                transitionService.transition(payment, success ? PaymentStatus.PENDING : PaymentStatus.FAILED, "PAYMENT_INITIATE");
         
         // ✅ FIX: Set attemptCount for all outcomes (was only set on success)
         payment.setAttemptCount(attempt);
@@ -184,10 +184,14 @@ public class PaymentService {
             payment.setFallbackReason("NO_FALLBACK_PROVIDER_AVAILABLE");
         }
 
-        if (finalProviderUsed != null) {
-            payment.setRouteName(finalProviderUsed);
-            payment.setProvider(finalProviderUsed);
-            payment.setCost(BigDecimal.ZERO);
+        if (finalRoute != null) {
+            payment.setRouteName(routeName(finalRoute));
+            payment.setProvider(providerCode(finalRoute));
+            payment.setCost(BigDecimal.valueOf(finalRoute.getCost()));
+            if (finalRoute.getFlowType() != null) {
+                payment.setFlowType(finalRoute.getFlowType().name());
+            }
+            payment.setProviderChannel(finalRoute.getProviderChannel());
 
             String health = success ? "HEALTHY"
                     : (isTechnicalError((finalResult != null ? finalResult.getRawResponse() : null)) ? "DOWN"
@@ -217,10 +221,10 @@ public class PaymentService {
 
         paymentRepository.save(payment);
 
-        saveLog(paymentId, finalProviderUsed, finalResult, success, payment.getFailureReason(),
+        saveLog(paymentId, finalRoute, finalResult, success, payment.getFailureReason(),
                 payment.getErrorType(), payment.isUsedFallback(), payment.getFallbackReason(), primaryProvider);
 
-        if (payment.getStatus() == PaymentStatus.FAILED) {
+        if (transitionService.shouldNotifyWebhook(transition)) {
             webhookService.sendWebhook(payment);
         }
 
@@ -231,34 +235,64 @@ public class PaymentService {
         if (phone == null || phone.isEmpty() || country == null || country.isEmpty()) {
             return true;
         }
-        String cleanPhone = phone.replaceAll("\\s+", "");
+        String cleanPhone = phone.replaceAll("[^0-9]", "");
         if (country.equalsIgnoreCase("MALI") || country.equalsIgnoreCase("ML")) {
-            return cleanPhone.startsWith("+223") || cleanPhone.startsWith("00223") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+            return isValidRegionalPhone(cleanPhone, "223", 8, 9);
         } else if (country.equalsIgnoreCase("BENIN") || country.equalsIgnoreCase("BJ")) {
-            return cleanPhone.startsWith("+229") || cleanPhone.startsWith("00229") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+            return isValidRegionalPhone(cleanPhone, "229", 8, 9);
         } else if (country.equalsIgnoreCase("SENEGAL") || country.equalsIgnoreCase("SN")) {
-            return cleanPhone.startsWith("+221") || cleanPhone.startsWith("00221") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 9 && cleanPhone.length() <= 10);
+            return isValidRegionalPhone(cleanPhone, "221", 9, 10);
         } else if (country.equalsIgnoreCase("COTE D'IVOIRE") || country.equalsIgnoreCase("CI")) {
-            return cleanPhone.startsWith("+225") || cleanPhone.startsWith("00225") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 10 && cleanPhone.length() <= 11);
+            return isValidRegionalPhone(cleanPhone, "225", 10, 11);
         } else if (country.equalsIgnoreCase("TOGO") || country.equalsIgnoreCase("TG")) {
-            return cleanPhone.startsWith("+228") || cleanPhone.startsWith("00228") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+            return isValidRegionalPhone(cleanPhone, "228", 8, 9);
         } else if (country.equalsIgnoreCase("GUINEA") || country.equalsIgnoreCase("GN")) {
-            return cleanPhone.startsWith("+224") || cleanPhone.startsWith("00224") || (!cleanPhone.startsWith("+") && cleanPhone.length() >= 8 && cleanPhone.length() <= 9);
+            return isValidRegionalPhone(cleanPhone, "224", 8, 9);
         }
         return true;
     }
 
-    private PaymentResult executeProvider(String providerName, double amount, String country, String operator, String phone,
+    private boolean isValidRegionalPhone(String digits, String countryPrefix, int minLocalLength, int maxLocalLength) {
+        if (digits == null || digits.isBlank()) {
+            return false;
+        }
+        String local = digits;
+        if (digits.startsWith("00" + countryPrefix)) {
+            local = digits.substring(countryPrefix.length() + 2);
+        } else if (digits.startsWith(countryPrefix)) {
+            local = digits.substring(countryPrefix.length());
+        } else if (digits.startsWith("0")) {
+            local = digits.substring(1);
+        }
+        return local.length() >= minLocalLength && local.length() <= maxLocalLength;
+    }
+
+    private PaymentResult executeProvider(PaymentProviderRoute route, Payment payment, String phone,
             String firstname, String lastname, String email) {
+        String providerName = providerCode(route);
         if (providerName == null)
             return null;
+
+        PayInProviderRequest request = PayInProviderRequest.builder()
+                .environment("LIVE")
+                .paymentId(payment.getPaymentId())
+                .amount(payment.getAmount().longValue())
+                .country(payment.getCountry())
+                .operator(payment.getOperator())
+                .providerChannel(route.getProviderChannel())
+                .flowType(route.getFlowType())
+                .phone(phone)
+                .firstname(firstname)
+                .lastname(lastname)
+                .email(email)
+                .build();
 
         try {
             switch (providerName.toUpperCase()) {
                 case "KKIAPAY":
-                    return kkiapayClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
+                    return kkiapayClient.initiatePayIn(request);
                 case "PAYDUNYA":
-                    return payDunyaClient.initiatePayment(amount, country, operator, phone, firstname, lastname, email);
+                    return payDunyaClient.initiatePayIn(request);
                 default:
                     log.warn("Unsupported provider {}", providerName);
                     return null;
@@ -272,13 +306,32 @@ public class PaymentService {
         }
     }
 
-    private void saveLog(String paymentId, String providerUsed, PaymentResult result, boolean success,
+    private String providerCode(PaymentProviderRoute route) {
+        return route != null && route.getProvider() != null ? route.getProvider().getCode() : null;
+    }
+
+    private String routeName(PaymentProviderRoute route) {
+        if (route == null) {
+            return "UNKNOWN";
+        }
+        String provider = providerCode(route);
+        return (provider != null ? provider : "UNKNOWN") + "_" + route.getOperator() + "_" + route.getCountry();
+    }
+
+    private void saveLog(String paymentId, PaymentProviderRoute route, PaymentResult result, boolean success,
+            String failureReason, ErrorType errorType, boolean fallbackUsed, String fallbackReason,
+            String primaryProvider) {
+        saveLog(paymentId, providerCode(route), routeName(route), result, success,
+                failureReason, errorType, fallbackUsed, fallbackReason, primaryProvider);
+    }
+
+    private void saveLog(String paymentId, String providerUsed, String routeUsed, PaymentResult result, boolean success,
             String failureReason, ErrorType errorType, boolean fallbackUsed, String fallbackReason,
             String primaryProvider) {
         try {
             LogEntry logEntry = new LogEntry();
             logEntry.setPaymentId(paymentId);
-            logEntry.setRouteUsed(providerUsed != null ? providerUsed : "UNKNOWN");
+            logEntry.setRouteUsed(routeUsed != null ? routeUsed : "UNKNOWN");
             logEntry.setProvider(providerUsed != null ? providerUsed : "UNKNOWN");
             logEntry.setResponseTime(result != null ? result.getResponseTimeMs() : 0.0);
             logEntry.setStatus(success ? LogStatus.SUCCESS : LogStatus.FAILED);
@@ -417,32 +470,6 @@ public class PaymentService {
         return health;
     }
 
-    public void processKkiapayCallback(com.Api.Fidelitypay.integration.kkiapay.dto.KkiapayCallbackDTO callback) {
-        log.info("Processing Kkiapay callback for transaction: {}", callback.getTransactionId());
-        updatePaymentStatusFromProvider(callback.getTransactionId(), callback.isPaymentSucces());
-    }
-
-    public void processPayDunyaCallback(String token, boolean success) {
-        log.info("Processing PayDunya callback for token: {}", token);
-        updatePaymentStatusFromProvider(token, success);
-    }
-
-    private void updatePaymentStatusFromProvider(String providerId, boolean success) {
-        paymentRepository.findByProviderPaymentId(providerId).ifPresent(payment -> {
-            if (payment.getStatus() != PaymentStatus.PENDING) {
-                log.info("Ignoring callback for providerId={} because payment {} is already {}",
-                        providerId, payment.getPaymentId(), payment.getStatus());
-                return;
-            }
-
-            payment.setStatus(success ? PaymentStatus.SUCCESS : PaymentStatus.FAILED);
-            payment.setFailureReason(success ? null : "PROVIDER_REPORTED_FAILURE");
-            payment.setUpdatedAt(LocalDateTime.now());
-            paymentRepository.save(payment);
-
-            webhookService.sendWebhook(payment);
-        });
-    }
     private String normalizeOperator(String op) {
         if (op == null || op.isBlank()) {
             return "UNKNOWN";
