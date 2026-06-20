@@ -4,6 +4,7 @@ import com.Api.Fidelitypay.controller.dto.MerchantApiPrincipal;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentRequest;
 import com.Api.Fidelitypay.controller.dto.MerchantPaymentResponse;
 import com.Api.Fidelitypay.controller.dto.FallbackSettingsDto;
+import com.Api.Fidelitypay.controller.dto.RoutingPreviewResponse;
 import com.Api.Fidelitypay.enums.ErrorType;
 import com.Api.Fidelitypay.enums.PaymentFlowType;
 import com.Api.Fidelitypay.enums.PaymentStatus;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,9 +61,19 @@ class MerchantPayInServiceTest {
         webhookService = mock(WebhookService.class);
         providerAccountService = mock(MerchantProviderAccountService.class);
         RoutingFallbackConfigService fallbackConfigService = mock(RoutingFallbackConfigService.class);
+        RoutingDecisionService routingDecisionService = mock(RoutingDecisionService.class);
         when(fallbackConfigService.getSettings()).thenReturn(new FallbackSettingsDto());
+        when(routeService.evaluatePayIn(anyString(), anyString(), anyString(), anyString())).thenAnswer(invocation ->
+                new PaymentRouteService.RoutingEvaluation(
+                        routeService.findAvailablePayIn(invocation.getArgument(0), invocation.getArgument(1),
+                                invocation.getArgument(2), invocation.getArgument(3)),
+                        RoutingPreviewResponse.builder()
+                                .country(invocation.getArgument(0)).operator(invocation.getArgument(1))
+                                .environment(invocation.getArgument(2)).scoringVersion("TEST")
+                                .evaluatedAt(java.time.LocalDateTime.now()).candidates(List.of()).build()));
         service = new MerchantPayInService(paymentRepository, logEntryRepository, routeService, kkiapayClient, payDunyaClient, webhookService,
-                providerAccountService, new PaymentStateTransitionService(), new PaymentFailureClassifier(), fallbackConfigService);
+                providerAccountService, new PaymentStateTransitionService(), new PaymentFailureClassifier(), fallbackConfigService,
+                routingDecisionService);
         ReflectionTestUtils.setField(service, "allowGlobalCredentialsFallback", true);
 
         User user = User.builder()

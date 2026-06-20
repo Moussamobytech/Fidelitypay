@@ -10,6 +10,8 @@ import java.util.Map;
 @Component
 public class RouteScoreCalculator {
 
+    public static final String SCORING_VERSION = "RELIABILITY_V1";
+
     @Value("${payment.routing.min-sample-size:10}")
     private int minSampleSize;
 
@@ -38,6 +40,10 @@ public class RouteScoreCalculator {
                 + priority
                 + route.getAvgLatency() * 0.001
                 + route.getCost() * 0.5;
+    }
+
+    public boolean hasSufficientSamples(PaymentProviderRoute route) {
+        return !hasInsufficientSamples(route);
     }
 
     private boolean hasInsufficientSamples(PaymentProviderRoute route) {

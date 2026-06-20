@@ -1,8 +1,10 @@
 package com.Api.Fidelitypay.controller;
 
 import com.Api.Fidelitypay.controller.dto.PaymentProviderRouteResponse;
+import com.Api.Fidelitypay.controller.dto.RoutingPreviewResponse;
 import com.Api.Fidelitypay.model.User;
 import com.Api.Fidelitypay.service.MerchantPaymentRouteSettingService;
+import com.Api.Fidelitypay.service.PaymentRouteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -17,6 +19,7 @@ import java.util.Map;
 public class PaymentRouteSettingsController {
 
     private final MerchantPaymentRouteSettingService routeSettingService;
+    private final PaymentRouteService paymentRouteService;
 
     @GetMapping("/api/v1/developer/payment-routes")
     public List<PaymentProviderRouteResponse> listMerchantRoutes(Authentication authentication) {
@@ -35,6 +38,14 @@ public class PaymentRouteSettingsController {
             @PathVariable Long routeId, @RequestBody Map<String, Integer> payload) {
         return ResponseEntity.ok(routeSettingService.setMerchantRoutePriority(resolveUserId(authentication), routeId,
                 payload.get("priority")));
+    }
+
+    @GetMapping("/api/v1/developer/routing/preview")
+    public RoutingPreviewResponse preview(Authentication authentication,
+            @RequestParam String country,
+            @RequestParam String operator) {
+        return paymentRouteService.evaluatePayIn(country, operator, "LIVE",
+                resolveUserId(authentication)).preview();
     }
 
     @GetMapping("/api/v1/admin/payment-routes")

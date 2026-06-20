@@ -48,6 +48,7 @@ public class MerchantPayInService {
     private final PaymentStateTransitionService transitionService;
     private final PaymentFailureClassifier failureClassifier;
     private final RoutingFallbackConfigService fallbackConfigService;
+    private final RoutingDecisionService routingDecisionService;
 
     @Value("${payment.providers.allow-global-credentials-fallback:false}")
     private boolean allowGlobalCredentialsFallback;
@@ -133,7 +134,10 @@ public class MerchantPayInService {
         payment.setCreatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        List<PaymentProviderRoute> routes = routeService.findAvailablePayIn(country, operator, environment, principal.getUser().getId());
+        PaymentRouteService.RoutingEvaluation routingEvaluation = routeService.evaluatePayIn(
+                country, operator, environment, principal.getUser().getId());
+        List<PaymentProviderRoute> routes = routingEvaluation.routes();
+        routingDecisionService.save(payment.getPaymentId(), routingEvaluation.preview());
         if (routes.isEmpty()) {
             PaymentStateTransitionService.TransitionResult transition =
                     transitionService.transition(payment, PaymentStatus.FAILED, "PAYIN_INITIATE");
