@@ -1,6 +1,7 @@
 package com.Api.Fidelitypay.model;
 
 import com.Api.Fidelitypay.enums.PaymentDirection;
+import com.Api.Fidelitypay.enums.FeeType;
 import com.Api.Fidelitypay.enums.PaymentFlowType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -72,9 +73,25 @@ public class PaymentProviderRoute {
     @Column(nullable = false)
     private int priority = 100;
 
-    // Route price/fee input for selection. Keep static until production measurements start.
+    // Backward-compatible fee value. For percentage pricing this stores the percentage rate.
+    // For fixed pricing this stores the fixed XOF amount.
     @Column(nullable = false)
     private double cost = 0.0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private FeeType feeType = FeeType.PERCENT;
+
+    @Column(nullable = false)
+    private double feeRate = 0.0;
+
+    @Column(nullable = false)
+    private double fixedFee = 0.0;
+
+    @Column(nullable = false)
+    private double minAmount = 0.0;
+
+    private Double maxAmount;
 
     @Column(nullable = false)
     private double avgLatency = 0.0;

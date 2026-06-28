@@ -12,6 +12,16 @@ public class RouteScoreCalculator {
 
     public static final String SCORING_VERSION = "RELIABILITY_V1";
 
+    private final RouteFeeCalculator routeFeeCalculator;
+
+    public RouteScoreCalculator() {
+        this(new RouteFeeCalculator());
+    }
+
+    public RouteScoreCalculator(RouteFeeCalculator routeFeeCalculator) {
+        this.routeFeeCalculator = routeFeeCalculator;
+    }
+
     @Value("${payment.routing.min-sample-size:10}")
     private int minSampleSize;
 
@@ -19,6 +29,10 @@ public class RouteScoreCalculator {
     private double maxAcceptableFailureRate;
 
     public Comparator<PaymentProviderRoute> comparator(Map<Long, Integer> merchantPriorities) {
+        return comparator(merchantPriorities, null);
+    }
+
+    public Comparator<PaymentProviderRoute> comparator(Map<Long, Integer> merchantPriorities, Double amount) {
         Map<Long, Integer> priorities = merchantPriorities == null ? Map.of() : merchantPriorities;
         return Comparator
                 .comparingInt(this::reliabilityBucket)
@@ -27,10 +41,14 @@ public class RouteScoreCalculator {
                         priorities.get(route.getId()),
                         reliabilityBucket(route)))
                 .thenComparingDouble(PaymentProviderRoute::getAvgLatency)
-                .thenComparingDouble(PaymentProviderRoute::getCost);
+                .thenComparingDouble(route -> estimatedFee(route, amount));
     }
 
     public double score(PaymentProviderRoute route, Integer merchantPriority) {
+        return score(route, merchantPriority, null);
+    }
+
+    public double score(PaymentProviderRoute route, Integer merchantPriority, Double amount) {
         int bucket = reliabilityBucket(route);
         double failureRate = effectiveFailureRate(route);
         int priority = effectiveMerchantPriority(route, merchantPriority, bucket);
@@ -39,7 +57,7 @@ public class RouteScoreCalculator {
                 + failureRate * 10_000.0
                 + priority
                 + route.getAvgLatency() * 0.001
-                + route.getCost() * 0.5;
+                + estimatedFee(route, amount) * 0.5;
     }
 
     public boolean hasSufficientSamples(PaymentProviderRoute route) {
@@ -59,6 +77,10 @@ public class RouteScoreCalculator {
 
     private double effectiveFailureRate(PaymentProviderRoute route) {
         return hasInsufficientSamples(route) ? 0.0 : route.getFailureRate();
+    }
+
+    private double estimatedFee(PaymentProviderRoute route, Double amount) {
+        return amount == null ? route.getCost() : routeFeeCalculator.estimateFee(route, amount);
     }
 
     private int effectiveMerchantPriority(PaymentProviderRoute route, Integer merchantPriority, int reliabilityBucket) {

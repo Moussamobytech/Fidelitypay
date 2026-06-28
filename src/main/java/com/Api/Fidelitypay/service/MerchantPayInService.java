@@ -135,7 +135,7 @@ public class MerchantPayInService {
         paymentRepository.save(payment);
 
         PaymentRouteService.RoutingEvaluation routingEvaluation = routeService.evaluatePayIn(
-                country, operator, environment, principal.getUser().getId());
+                country, operator, environment, principal.getUser().getId(), request.getAmount());
         List<PaymentProviderRoute> routes = routingEvaluation.routes();
         routingDecisionService.save(payment.getPaymentId(), routingEvaluation.preview());
         if (routes.isEmpty()) {
@@ -178,6 +178,7 @@ public class MerchantPayInService {
             finalRoute = route;
             payment.setAttemptCount(attempt);
             payment.setProvider(route.getProvider().getCode());
+            payment.setCost(BigDecimal.valueOf(routeService.estimateFee(route, request.getAmount())));
             payment.setMerchantProviderAccountId(account == null ? null : account.getId());
             payment.setRouteName(routeName(route));
             payment.setFlowType(route.getFlowType().name());

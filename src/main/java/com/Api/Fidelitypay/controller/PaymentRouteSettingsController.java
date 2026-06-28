@@ -43,9 +43,10 @@ public class PaymentRouteSettingsController {
     @GetMapping("/api/v1/developer/routing/preview")
     public RoutingPreviewResponse preview(Authentication authentication,
             @RequestParam String country,
-            @RequestParam String operator) {
+            @RequestParam String operator,
+            @RequestParam(defaultValue = "500") double amount) {
         return paymentRouteService.evaluatePayIn(country, operator, "LIVE",
-                resolveUserId(authentication)).preview();
+                resolveUserId(authentication), amount).preview();
     }
 
     @GetMapping("/api/v1/admin/payment-routes")

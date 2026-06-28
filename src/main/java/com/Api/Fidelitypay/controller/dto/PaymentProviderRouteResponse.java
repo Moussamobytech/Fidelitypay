@@ -1,6 +1,7 @@
 package com.Api.Fidelitypay.controller.dto;
 
 import com.Api.Fidelitypay.enums.PaymentDirection;
+import com.Api.Fidelitypay.enums.FeeType;
 import com.Api.Fidelitypay.enums.PaymentFlowType;
 import lombok.Builder;
 import lombok.Data;
@@ -23,6 +24,11 @@ public class PaymentProviderRouteResponse {
     private Integer merchantPriority;
     private int effectivePriority;
     private double cost;
+    private FeeType feeType;
+    private double feeRate;
+    private double fixedFee;
+    private double minAmount;
+    private Double maxAmount;
     private double avgLatency;
     private double failureRate;
     private Double selectionScore;

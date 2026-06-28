@@ -130,6 +130,11 @@ public class PaymentProviderService {
                 .merchantPriority(merchantPriority)
                 .effectivePriority(merchantPriority == null ? route.getPriority() : merchantPriority)
                 .cost(route.getCost())
+                .feeType(route.getFeeType())
+                .feeRate(route.getFeeRate())
+                .fixedFee(route.getFixedFee())
+                .minAmount(route.getMinAmount())
+                .maxAmount(route.getMaxAmount())
                 .avgLatency(route.getAvgLatency())
                 .failureRate(route.getFailureRate())
                 .selectionScore(selectionScore)
@@ -160,5 +165,10 @@ public class PaymentProviderService {
         route.setEnabled(request.isEnabled());
         route.setPriority(request.getPriority());
         route.setCost(request.getCost());
+        route.setFeeType(request.getFeeType());
+        route.setFeeRate(request.getFeeRate());
+        route.setFixedFee(request.getFixedFee());
+        route.setMinAmount(request.getMinAmount());
+        route.setMaxAmount(request.getMaxAmount());
     }
 }

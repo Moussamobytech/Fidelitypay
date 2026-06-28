@@ -100,7 +100,7 @@ public class PaymentService {
 
         // 2. Use the same scored provider-route catalog as the merchant API flow.
         List<PaymentProviderRoute> routesToTry = routeService.findAvailablePayIn(countryCode, operator, "LIVE",
-                user == null ? null : user.getId());
+                user == null ? null : user.getId(), amount);
 
         if (routesToTry.isEmpty()) {
             transitionService.transition(payment, PaymentStatus.FAILED, "PAYMENT_INITIATE");
@@ -187,7 +187,7 @@ public class PaymentService {
         if (finalRoute != null) {
             payment.setRouteName(routeName(finalRoute));
             payment.setProvider(providerCode(finalRoute));
-            payment.setCost(BigDecimal.valueOf(finalRoute.getCost()));
+            payment.setCost(BigDecimal.valueOf(routeService.estimateFee(finalRoute, amount)));
             if (finalRoute.getFlowType() != null) {
                 payment.setFlowType(finalRoute.getFlowType().name());
             }

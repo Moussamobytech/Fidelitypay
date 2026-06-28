@@ -12,6 +12,7 @@ public class RoutingPreviewResponse {
     private String country;
     private String operator;
     private String environment;
+    private double amount;
     private String scoringVersion;
     private LocalDateTime evaluatedAt;
     private Candidate selected;
@@ -26,6 +27,11 @@ public class RoutingPreviewResponse {
         private String flowType;
         private int effectivePriority;
         private double cost;
+        private String feeType;
+        private double feeRate;
+        private double fixedFee;
+        private double minAmount;
+        private Double maxAmount;
         private double avgLatencyMs;
         private double initiationFailureRate;
         private int sampleCount;
