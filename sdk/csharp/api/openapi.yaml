@@ -1,0 +1,296 @@
+openapi: 3.0.1
+info:
+  description: |
+    Public endpoints for third-party merchant integrations.
+    Authenticate every request with the `X-API-Key` header.
+  title: FidelityPay Merchant SDK API
+  version: 1.0.0
+servers:
+- description: Local development
+  url: http://localhost:8060
+- description: Staging
+  url: https://dev.pay.fidelity-market.com
+security:
+- apiKeyAuth: []
+tags:
+- description: Public merchant API authenticated with API keys
+  name: merchant-pay-in
+paths:
+  /api/v1/payments/{paymentId}/actions/otp:
+    post:
+      operationId: submitOtp
+      parameters:
+      - explode: false
+        in: header
+        name: X-API-Key
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: paymentId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpActionRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MerchantPaymentResponse"
+          description: OK
+      summary: Submit a required OTP action
+      tags:
+      - merchant-pay-in
+  /api/v1/payments/initiate:
+    post:
+      description: Public API endpoint for merchant servers and SDKs. Uses X-API-Key
+        and Idempotency-Key headers.
+      operationId: initiate
+      parameters:
+      - explode: false
+        in: header
+        name: X-API-Key
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MerchantPaymentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MerchantPaymentResponse"
+          description: OK
+      summary: Initiate a merchant pay-in
+      tags:
+      - merchant-pay-in
+  /api/v1/payments/{paymentId}:
+    get:
+      operationId: getPayment
+      parameters:
+      - explode: false
+        in: header
+        name: X-API-Key
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: false
+        in: path
+        name: paymentId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MerchantPaymentResponse"
+          description: OK
+      summary: Read a merchant pay-in
+      tags:
+      - merchant-pay-in
+components:
+  schemas:
+    OtpActionRequest:
+      example:
+        otp: otp
+      properties:
+        otp:
+          maxLength: 12
+          minLength: 3
+          type: string
+      required:
+      - otp
+      type: object
+    MerchantPaymentResponse:
+      example:
+        paymentId: paymentId
+        status: PENDING
+        paymentUrl: paymentUrl
+        provider: provider
+        flowType: flowType
+        operator: operator
+        country: country
+        amount: 0.8008281904610115
+        currency: currency
+        nextAction:
+          type: type
+          provider: provider
+          message: message
+        failureReason: failureReason
+        errorType: NETWORK
+        failureStage: VALIDATION
+      properties:
+        paymentId:
+          type: string
+        status:
+          enum:
+          - PENDING
+          - REQUIRES_ACTION
+          - PENDING_RECONCILIATION
+          - SUCCESS
+          - FAILED
+          - CANCELLED
+          type: string
+        paymentUrl:
+          type: string
+        provider:
+          type: string
+        flowType:
+          type: string
+        operator:
+          type: string
+        country:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        nextAction:
+          $ref: "#/components/schemas/NextAction"
+        failureReason:
+          type: string
+        errorType:
+          enum:
+          - NETWORK
+          - TIMEOUT
+          - AUTHENTICATION
+          - PROVIDER_DOWN
+          - BAD_REQUEST
+          - INTERNAL_ERROR
+          - UNKNOWN
+          type: string
+        failureStage:
+          enum:
+          - VALIDATION
+          - ROUTING
+          - PROVIDER_INIT
+          - PROVIDER_ACTION
+          - PROVIDER_CALLBACK
+          - RECONCILIATION
+          - INTERNAL
+          - UNKNOWN
+          type: string
+      type: object
+    NextAction:
+      example:
+        type: type
+        provider: provider
+        message: message
+      properties:
+        type:
+          type: string
+        provider:
+          type: string
+        message:
+          type: string
+      type: object
+    Customer:
+      example:
+        phone: phone
+        firstname: firstname
+        lastname: lastname
+        email: email
+      properties:
+        phone:
+          maxLength: 50
+          minLength: 0
+          type: string
+        firstname:
+          maxLength: 120
+          minLength: 0
+          type: string
+        lastname:
+          maxLength: 120
+          minLength: 0
+          type: string
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+      required:
+      - firstname
+      - lastname
+      type: object
+    MerchantPaymentRequest:
+      example:
+        amount: 1
+        currency: currency
+        country: country
+        operator: operator
+        customer:
+          phone: phone
+          firstname: firstname
+          lastname: lastname
+          email: email
+        returnUrl: returnUrl
+        cancelUrl: cancelUrl
+      properties:
+        amount:
+          format: int64
+          minimum: 1
+          type: integer
+        currency:
+          pattern: XOF
+          type: string
+        country:
+          maxLength: 3
+          minLength: 2
+          type: string
+        operator:
+          maxLength: 50
+          minLength: 0
+          type: string
+        customer:
+          $ref: "#/components/schemas/Customer"
+        returnUrl:
+          maxLength: 1000
+          minLength: 0
+          type: string
+        cancelUrl:
+          maxLength: 1000
+          minLength: 0
+          type: string
+      required:
+      - country
+      - currency
+      - customer
+      - operator
+      type: object
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      description: JWT token from POST /api/v1/auth/login
+      scheme: bearer
+      type: http
+    apiKeyAuth:
+      description: Merchant API key generated in the developer dashboard
+      in: header
+      name: X-API-Key
+      type: apiKey
+
